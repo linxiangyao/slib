@@ -40,9 +40,10 @@ if server send pack to client ok. server network will post send_pack_to_client_e
 
 
 NOTE:
-	for good perfromance, network has no lock and is thread unsafe,
-	all the functions should be called in m_work_looper thread(typical is main thread), and will be callbacked in the same thread.
+	one server network bind to one port. if there are two ports, there are two server networks.
 
+	network is thread unsafe(for good perfromance).
+	network should be called in m_work_looper thread(typical is main thread), and network will callback in the same thread.
 	there may be many networks in one thread.
 
 	one ITcpSocketCallbackApi may be used by many networks.

@@ -22,9 +22,8 @@ network speed test, choice fastest svr.
 NOTE:
 	one client network bind to one server. if there are two servers, there are two client networks.
 
-	for good perfromance, network has no lock and is thread unsafe,
-	all the functions should be called in m_work_looper thread(typical is main thread), and will be callbacked in the same thread.
-
+	network is thread unsafe(for good perfromance).
+	network should be called in m_work_looper thread(typical is main thread), and network will callback in the same thread.
 	there may be many networks in one thread.
 
 	one ITcpSocketCallbackApi may be used by many networks.
