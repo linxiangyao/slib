@@ -7,7 +7,7 @@ S_NAMESPACE_BEGIN
 
 
 
-// global funtion --------------------------------------------------------------------------------------
+// public static funtion --------------------------------------------------------------------------------------
 bool initSocketLib()
 {
     WORD socketVersion = MAKEWORD(2, 2);
@@ -25,9 +25,7 @@ void releaseSocketLib()
 }
 
 
-
-
-// inner static function --------------------------------------------------------------------------------------
+// inner static funtion --------------------------------------------------------------------------------------
 static bool __bindAndListen(SOCKET svr_socket, const std::string& svrIpOrName, int svrPort)
 {
     uint32_t svrIp = 0;
@@ -91,6 +89,9 @@ static bool __changeSocketToAsync(SOCKET s)
         return false;
     return true;
 }
+
+
+
 
 
 
@@ -444,9 +445,23 @@ bool TcpSocketBlockApi::__getClientCtxById(socket_id_t sid, __SocketCtx* ctx)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // TcpSocketCallbackApi --------------------------------------------------------------------------------------
 
-// TcpSocketCallbackApi static function -------
+// static function --
 static bool __createCompleteIoHandle(HANDLE* h_io)
 {
     HANDLE h = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
@@ -509,7 +524,7 @@ static bool __createSocketEventAndObserverSocket(WSAEVENT* socket_event, SOCKET 
 }
 
 
-// TcpSocketCallbackApi new/delete -------
+// new/delete --
 TcpSocketCallbackApi::TcpSocketCallbackApi()
 {
 	slog_d("new TcpSocketCallbackApi=%0", (uint64_t)this);
@@ -547,7 +562,7 @@ bool TcpSocketCallbackApi::init(MessageLooper * work_looper)
 }
 
 
-// TcpSocketCallbackApi client interface -------
+// client interface --
 bool TcpSocketCallbackApi::createClientSocket(socket_id_t* client_sid, const CreateClientSocketParam& param)
 {
     if (client_sid == NULL)
@@ -659,7 +674,7 @@ uint32_t TcpSocketCallbackApi::getClientSocketSvrPort(socket_id_t client_sid)
 }
 
 
-// TcpSocketCallbackApi svr interface -------
+// server interface --
 bool TcpSocketCallbackApi::createSvrListenSocket(socket_id_t* svr_listen_sid, const CreateSvrSocketParam& param)
 {
     if (svr_listen_sid == NULL)
@@ -770,7 +785,7 @@ uint32_t TcpSocketCallbackApi::getSvrListenSocketPort(socket_id_t svr_listen_sid
 
 
 
-// TcpSocketCallbackApi message -------
+//  private --
 void TcpSocketCallbackApi::onMessage(Message* msg, bool* isHandled)
 {
 	if (msg->m_target != this)
@@ -970,7 +985,7 @@ void TcpSocketCallbackApi::__onSvrTransSocketClosedMsg(Message * msg)
 
 
 
-// TcpSocketCallbackApi helper funtion -------
+
 void TcpSocketCallbackApi::__stopSocketByCtx(__SocketCtx* ctx)
 {
 	if (ctx == NULL)
@@ -1096,7 +1111,19 @@ Thread* TcpSocketCallbackApi::__getThreadById(socket_id_t sid)
 
 
 
-// TcpSocketCallbackApi __ClientRun -------
+
+
+
+
+
+
+
+
+
+
+
+
+// __ClientRun --
 TcpSocketCallbackApi::__ClientRun::__ClientRun(void* msg_target, MessageLooper* notify_looper, socket_id_t sid, SOCKET s, const std::string& svr_ip_or_name, int svr_port)
 {
     m_socket = s;
@@ -1320,7 +1347,7 @@ void TcpSocketCallbackApi::__ClientRun::__clearSession()
 
 
 
-// TcpSocketCallbackApi __SvrListenRun -------
+// __SvrListenRun --
 TcpSocketCallbackApi::__SvrListenRun::__SvrListenRun(MessageLooper* notify_looper, void* notify_target, SOCKET s, socket_id_t sid, const std::string& svr_ip_or_name, int svr_port)
 {
 	m_callback_looper = notify_looper;
@@ -1404,7 +1431,7 @@ void TcpSocketCallbackApi::__SvrListenRun::__postMsgToTarget(Message * msg)
 
 
 
-// TcpSocketCallbackApi __SvrTransRun -------
+// __SvrTransRun --
 TcpSocketCallbackApi::__SvrTransRun::__SvrTransRun(SOCKET s, socket_id_t sid, MessageLooper* notify_looper, void* notify_target)
 {
     m_socket = s;
