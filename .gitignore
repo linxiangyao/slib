@@ -1,3 +1,7 @@
 /scp.bat
 project/win/.vs
-Debug
+/project/win/sLib/x64/Debug
+/project/win/testSLib/x64/Debug
+/project/win/testSLibClient/x64/Debug
+/project/win/x64/Debug
+/project/win/testSLibServer/x64/Debug
