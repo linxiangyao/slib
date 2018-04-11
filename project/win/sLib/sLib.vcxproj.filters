@@ -1,0 +1,381 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="..\..\..\src\comm\binary.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\comm\comm.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\comm\intType.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\comm\variant.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\log\consoleAppender.h">
+      <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\log\fileAppender.h">
+      <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\log\log.h">
+      <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\log\logComm.h">
+      <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\log\logMarcro.h">
+      <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\socket\socketApi.h">
+      <Filter>socket</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\socket\socketApiType.h">
+      <Filter>socket</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\socket\socketLib.h">
+      <Filter>socket</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\socket\win\socketApi_win.h">
+      <Filter>socket\win</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\thread\messageLooper.h">
+      <Filter>thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\thread\messageLoopThread.h">
+      <Filter>thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\thread\thread.h">
+      <Filter>thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\thread\threadComm.h">
+      <Filter>thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\thread\threadLib.h">
+      <Filter>thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\util\consoleUtil.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\util\debugUtil.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\util\fileUtil.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\util\stringUtil.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\util\utilLib.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\util\timeUtil.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\server\serverNetwork.h">
+      <Filter>network\server</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\server\serverNetworkLib.h">
+      <Filter>network\server</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\clientNetworkLib.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\clientNetwork.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\clientCgi.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\clientComm.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\server\serverComm.h">
+      <Filter>network\server</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\clientNetSpeedTester.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\thread\messageType.h">
+      <Filter>thread</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\rawClientNetwork.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\comm\stlComm.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\socket\linux\socketApi_linux.h">
+      <Filter>socket\linux</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\simpleClientNetworkConsoleApp.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\server\simpleSvrNetworkConsoleApp.h">
+      <Filter>network\server</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\client\clientCgiMgr.h">
+      <Filter>network\client</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\server\serverCgi.h">
+      <Filter>network\server</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\console\consoleApp.h">
+      <Filter>console</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\server\serverCgiMgr.h">
+      <Filter>network\server</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\xml\tinyxml2\tinyxml2.h">
+      <Filter>3rd\data\xml\tinyxml2</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\allocator.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\assertions.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\autolink.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\config.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\features.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\forwards.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\json.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\reader.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\value.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\version.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\include\json\writer.h">
+      <Filter>3rd\data\json\jsoncpp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\jsoncpp\src\lib_json\json_tool.h">
+      <Filter>3rd\data\json\jsoncpp\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\data\json\rapidjson\rapidjson.h">
+      <Filter>3rd\data\json\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rd\db\sqlite\sqlite3.h">
+      <Filter>3rd\db\sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\comm\ns.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\comm\m.h">
+      <Filter>comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\comm\networkComm.h">
+      <Filter>network\comm</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\packer\simpleTcpPacker.h">
+      <Filter>network\packer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\network\networkLib.h">
+      <Filter>network</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\slib.h" />
+    <ClInclude Include="..\..\..\src\db\sqlite\sqliteLib.h">
+      <Filter>db\sqlite</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="comm">
+      <UniqueIdentifier>{e694dfd5-92d4-456d-959b-a771e6ada245}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="util">
+      <UniqueIdentifier>{c0de8444-4971-4373-abaa-f8a780b0b680}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="thread">
+      <UniqueIdentifier>{81fa133d-4d3b-4406-ad27-bf6482edb9af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="log">
+      <UniqueIdentifier>{4f4c6cbc-302e-4597-bc6f-9b637c763a6e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="socket">
+      <UniqueIdentifier>{e0bd6c66-832a-4d52-a1b0-4ac05ec7a109}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="socket\win">
+      <UniqueIdentifier>{0f41b1ad-2480-49cd-b18b-351bdcf30b8f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network">
+      <UniqueIdentifier>{ca8b0dcb-f2d3-4b4d-ad64-eada973a2cbf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network\client">
+      <UniqueIdentifier>{6b5f0b86-2897-481f-8920-27ddc72a9788}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network\server">
+      <UniqueIdentifier>{be55a5e2-a676-4151-baae-31a5b5f27919}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="socket\linux">
+      <UniqueIdentifier>{9a984c95-7054-432f-a223-faa977b42663}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="console">
+      <UniqueIdentifier>{74e8bc79-8a21-4fcd-b563-e163f73187b4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd">
+      <UniqueIdentifier>{785f1ba4-621a-4a97-8f43-5a63023f446d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data">
+      <UniqueIdentifier>{fad1b2d1-60d5-452d-9000-b95729600263}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\json">
+      <UniqueIdentifier>{db0833ba-2cf8-4831-a3ed-5d3d0bf051a2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\xml">
+      <UniqueIdentifier>{740c534b-5d1d-452a-9317-66c48d1fefd2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\pb">
+      <UniqueIdentifier>{47948894-9bd9-4849-a6a7-d09db79d82f9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\pb\google">
+      <UniqueIdentifier>{2989d5d5-1c0f-4bbe-a0e2-5cf0fbd3d5df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\pb\google\protobuf">
+      <UniqueIdentifier>{66bbf095-a9d4-4ffa-8fd5-856e7999e272}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\json\jsoncpp">
+      <UniqueIdentifier>{b0595aef-38ae-43b6-ae6a-9fd8bdc55e28}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\json\rapidjson">
+      <UniqueIdentifier>{f83167b9-4ab0-45ef-b9de-174805698670}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\xml\tinyxml2">
+      <UniqueIdentifier>{705353d1-3524-4d4f-9cb3-8f4e11559510}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\json\jsoncpp\include">
+      <UniqueIdentifier>{e43dd942-dbde-48b3-a95e-5486527ce37a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\data\json\jsoncpp\src">
+      <UniqueIdentifier>{ac6b4aca-637a-4cc7-8d7a-861d905d7cfd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\db">
+      <UniqueIdentifier>{a5a1a190-7182-4b2c-af2e-6b31d0d79c5a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\db\sqlite">
+      <UniqueIdentifier>{424e38a4-5a9b-4381-b057-b3b15a02d99f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\enc">
+      <UniqueIdentifier>{a758853d-d4e4-4724-a926-379594f07a31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network\comm">
+      <UniqueIdentifier>{048c267b-a263-4a54-b611-be90d5bf650c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network\packer">
+      <UniqueIdentifier>{45db7022-1831-450e-8251-9eff9d0d1f24}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rd\enc\openssl">
+      <UniqueIdentifier>{289aac17-7e43-4f17-8939-596c9b15a0c9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="db">
+      <UniqueIdentifier>{7411ad20-e173-470c-9966-4f0f08124584}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="db\sqlite">
+      <UniqueIdentifier>{8a5f9674-edce-4676-96c7-08723936f3df}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\src\comm\variant.cpp">
+      <Filter>comm</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\log\consoleAppender.cpp">
+      <Filter>log</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\log\fileAppender.cpp">
+      <Filter>log</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\log\log.cpp">
+      <Filter>log</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\log\logComm.cpp">
+      <Filter>log</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\socket\win\socketApi_win.cpp">
+      <Filter>socket\win</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\thread\messageLooper.cpp">
+      <Filter>thread</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\thread\messageLoopThread.cpp">
+      <Filter>thread</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\util\fileUtil.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\util\stringUtil.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\util\timeUtil.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\server\serverNetwork.cpp">
+      <Filter>network\server</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\client\clientNetwork.cpp">
+      <Filter>network\client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\client\clientCgi.cpp">
+      <Filter>network\client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\client\clientNetSpeedTester.cpp">
+      <Filter>network\client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\client\rawClientNetwork.cpp">
+      <Filter>network\client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\socket\linux\socketApi_linux.cpp">
+      <Filter>socket\linux</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\client\clientCgiMgr.cpp">
+      <Filter>network\client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\server\serverCgi.cpp">
+      <Filter>network\server</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\console\consoleApp.cpp">
+      <Filter>console</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\server\serverCgiMgr.cpp">
+      <Filter>network\server</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rd\data\xml\tinyxml2\tinyxml2.cpp">
+      <Filter>3rd\data\xml\tinyxml2</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rd\data\json\jsoncpp\src\lib_json\json_reader.cpp">
+      <Filter>3rd\data\json\jsoncpp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rd\data\json\jsoncpp\src\lib_json\json_value.cpp">
+      <Filter>3rd\data\json\jsoncpp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rd\data\json\jsoncpp\src\lib_json\json_writer.cpp">
+      <Filter>3rd\data\json\jsoncpp\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rd\db\sqlite\sqlite3.c">
+      <Filter>3rd\db\sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\thread\thread.cpp">
+      <Filter>thread</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\network\packer\simpleTcpPacker.cpp">
+      <Filter>network\packer</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\3rd\data\json\jsoncpp\src\lib_json\json_valueiterator.inl">
+      <Filter>3rd\data\json\jsoncpp\src</Filter>
+    </None>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,5 @@
+#include "clientCgi.h"
+SCLIENT_NAMESPACE_BEGIN
+
+SCLIENT_NAMESPACE_END
+

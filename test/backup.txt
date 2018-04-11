@@ -1,0 +1,769 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+//
+//
+//
+//
+//
+//
+//
+//enum ESyncType
+//{
+//	ESyncType_msg = 0x1,
+//	ESyncType_contact = 0x2,
+//};
+//
+//class SyncKey
+//{
+//public:
+//	typedef std::map<ESyncType, uint32_t> SyncTypeToVersionMap;
+//
+//	bool isContainSyncType(ESyncType sync_type);
+//	uint32_t getSyncVersionBySyncType(ESyncType sync_type);
+//	void setSyncTypeAndVersion(ESyncType sync_type, uint32_t version);
+//
+//	SyncTypeToVersionMap getSyncTypeToVersionMap();
+//
+//	Binary toNetworkBinary() const;
+//	bool fromNetworkBinary(const Binary& bin);
+//
+//private:
+//	SyncTypeToVersionMap m_sync_type_to_version_map;
+//};
+//
+//
+//
+//
+//
+//bool SyncKey::isContainSyncType(ESyncType sync_type)
+//{
+//	return m_sync_type_to_version_map.find(sync_type) != m_sync_type_to_version_map.end();
+//}
+//
+//uint32_t SyncKey::getSyncVersionBySyncType(ESyncType sync_type)
+//{
+//	if (!isContainSyncType(sync_type))
+//		return (uint32_t)-1;
+//
+//	return m_sync_type_to_version_map[sync_type];
+//}
+//
+//void SyncKey::setSyncTypeAndVersion(ESyncType sync_type, uint32_t version)
+//{
+//	m_sync_type_to_version_map[sync_type] = version;
+//}
+//
+//SyncKey::SyncTypeToVersionMap SyncKey::getSyncTypeToVersionMap()
+//{
+//	return m_sync_type_to_version_map;
+//}
+//
+//Binary SyncKey::toNetworkBinary() const
+//{
+//	Binary bin;
+//	Json::Value root;
+//	for (SyncTypeToVersionMap::const_iterator it = m_sync_type_to_version_map.begin(); it != m_sync_type_to_version_map.end(); ++it)
+//	{
+//		Json::Value e;
+//		e["sync_type"] = it->first;
+//		e["version"] = it->second;
+//		root.append(e);
+//	}
+//	Json::FastWriter w;
+//	std::string str = StringUtil::trim(w.write(root));
+//	bin.append((const byte_t*)str.c_str(), str.size() + 1);
+//	return bin;
+//}
+//
+//bool SyncKey::fromNetworkBinary(const Binary & bin)
+//{
+//	if (bin.getLen() == 0)
+//		return false;
+//
+//	std::string str;
+//	str.append((const char*)bin.getData(), bin.getLen());
+//	Json::Reader reader;
+//	Json::Value root;
+//	if (!reader.parse(str, root))
+//		return false;
+//	if (!root.isArray())
+//		return false;
+//
+//	for (size_t i = 0; i < root.size(); ++i)
+//	{
+//		Json::Value& e = root[(int)i];
+//		ESyncType sync_type = (ESyncType)e["sync_type"].asInt();
+//		int version = (ESyncType)e["version"].asInt();
+//		m_sync_type_to_version_map[sync_type] = version;
+//	}
+//
+//	return true;
+//}
+//
+//
+//
+//class __SvrLogic : public IConsoleAppLogic
+//{
+//public:
+//
+//private:
+//	virtual void onAppStartMsg(IConsoleAppApi * api) override
+//	{
+//		m_console_api = api;
+//
+//		m_id_seed = 0;
+//		//m_seq_seed = 0;
+//
+//		initSocketLib();
+//		m_sapi = new TcpSocketCallbackApi();
+//		if (!m_sapi->init(&(m_console_api->getMessageLooper())))
+//		{
+//			printf("svr:: fail to m_sapi->init\n");
+//			m_console_api->exit();
+//			return;
+//		}
+//
+//		m_listen_sid = 0;
+//		TcpSocketCallbackApi::CreateSvrSocketParam param;
+//		param.m_callback_looper = &m_console_api->getMessageLooper();
+//		param.m_callback_target = this;
+//		param.m_svr_ip_or_name = "127.0.0.1";
+//		param.m_svr_port = 12306;
+//		if (!m_sapi->createSvrListenSocket(&m_listen_sid, param))
+//		{
+//			printf("svr::  fail to m_sapi->createSvrListenSocket\n");
+//			m_console_api->exit();
+//			return;
+//		}
+//
+//		if (!m_sapi->startSvrListenSocket(m_listen_sid))
+//		{
+//			printf("svr:: fail to m_sapi->startSvrListenSocket\n");
+//			m_console_api->exit();
+//			return;
+//		}
+//	}
+//
+//	virtual void onAppStopMsg() override
+//	{
+//		printf("svr:: exiting...\n");
+//		delete m_sapi;
+//		releaseSocketLib();
+//		printf("svr:: exit\n");
+//	}
+//
+//
+//	virtual void onTextMsg(const std::string& textMsg) override
+//	{
+//		if (!m_sapi->sendDataFromSvrTranSocketToClient(m_tran_sid, (const byte_t*)textMsg.c_str(), textMsg.size() + 1))
+//		{
+//			printf("svr:: fail to m_sapi->sendDataFromSvrTranSocketToClient\n");
+//		}
+//	}
+//
+//	virtual void onMessage(Message * msg, bool* is_handled) override
+//	{
+//		if (msg->m_target != this)
+//			return;
+//
+//		if (msg->m_sender == m_sapi)
+//		{
+//			switch (msg->m_msgType)
+//			{
+//			case TcpSocketCallbackApi::EMsgType_svrListenSocketStarted:
+//				printf("svr:: server started, wait client...\n");
+//				break;
+//
+//			case TcpSocketCallbackApi::EMsgType_svrListenSocketStopped:
+//				printf("svr:: server stopped\n");
+//				break;
+//
+//			case TcpSocketCallbackApi::EMsgType_svrListenSocketAccepted:
+//			{
+//				printf("svr:: accept\n");
+//				m_tran_sid = msg->m_args.getUint64("svr_tran_sid");
+//				/*				std::string str = "hello, i am svr";
+//				if (!m_sapi->sendDataFromSvrTranSocketToClient(m_tran_sid, (const byte_t*)str.c_str(), str.size() + 1))
+//				{
+//				printf("fail to sendDataFromSvrTranSocketToClient\n");
+//				}*/
+//			}
+//			break;
+//
+//			case TcpSocketCallbackApi::EMsgType_svrTranSocketStopped:
+//				printf("svr:: client disconnected\n");
+//				m_tran_sid = 0;
+//				m_recv_data.clear();
+//				break;
+//
+//			case TcpSocketCallbackApi::EMsgType_svrTranSocketRecvData:
+//				__onMsgTranSocketRecvData(msg);
+//				break;
+//
+//			case TcpSocketCallbackApi::EMsgType_svrTranSocketSendDataEnd:
+//				break;
+//
+//			default:
+//				break;
+//			}
+//		}
+//	}
+//
+//	void __onMsgTranSocketRecvData(S::Message * msg)
+//	{
+//		Binary b;
+//		msg->m_args.getBinary("data", &b);
+//		m_recv_data.append(b);
+//		Pack recv_pack;
+//		size_t len = 0;
+//		EUnpackResult r = m_packer.unpackFromBin(m_recv_data, &recv_pack, &len);
+//		if (r == EUnpackResult_fail)
+//		{
+//			m_sapi->stopSvrTranSocket(m_tran_sid);
+//			m_tran_sid = 0;
+//			m_recv_data.clear();
+//			printf("svr:: fail to unpack data\n");
+//			return;
+//		}
+//
+//		if (r == EUnpackResult_needMoreData)
+//		{
+//			printf("svr:: unpack need more data\n");
+//			return;
+//		}
+//
+//		m_recv_data.shrinkBegin(len);
+//
+//		//printf("recv pack from client, cmd_type=%i, seq=%i\n", recv_pack.m_cmd_type, recv_pack.m_seq);
+//		//if (recv_pack.m_cmd_type == 1 || recv_pack.m_cmd_type == 2 || recv_pack.m_cmd_type == 3 || recv_pack.m_cmd_type == 4 || recv_pack.m_cmd_type == 4)
+//		{
+//			if (recv_pack.m_cmd_type == 6)
+//			{
+//				g::SyncReq req;
+//				req.ParseFromArray(recv_pack.m_data.getData(), recv_pack.m_data.getLen());
+//
+//				printf("svr:: recv pack, cmd_type=%i, seq=%i, data=%s\n", recv_pack.m_cmd_type, recv_pack.m_seq, req.synckey().c_str());
+//			}
+//			else
+//			{
+//				printf("svr:: recv pack, cmd_type=%i, seq=%i, data=%s\n", recv_pack.m_cmd_type, recv_pack.m_seq, recv_pack.m_data.getData());
+//			}
+//
+//			Binary bin;
+//			Pack p;
+//			p.m_app_id = recv_pack.m_app_id;
+//			p.m_uin = recv_pack.m_uin;
+//			p.m_cmd_type = 10000 + recv_pack.m_cmd_type;
+//			p.m_id = ++m_id_seed;
+//			p.m_seq = recv_pack.m_seq;
+//
+//			if (recv_pack.m_cmd_type == 6) // sync cmd
+//			{
+//				g::SyncResp resp;
+//				resp.mutable_baseresp()->set_errcode(0);
+//
+//				SyncKey sync_key;
+//				sync_key.setSyncTypeAndVersion(ESyncType_msg, 100);
+//				sync_key.setSyncTypeAndVersion(ESyncType_contact, 200);
+//				Binary sync_key_bin = sync_key.toNetworkBinary();
+//				resp.mutable_synckey()->append((const char*)sync_key_bin.getData(), sync_key_bin.getLen());
+//
+//				g::AddContactCmd* add_contact_cmd = resp.add_addcontactcmds();
+//				add_contact_cmd->set_headimgurl("http://www.baidu.com");
+//				add_contact_cmd->set_username("ryanlin4");
+//				add_contact_cmd->set_nickname("xiao lin");
+//				add_contact_cmd->set_serverid(10001);
+//
+//				std::string resp_bin;
+//				resp.SerializeToString(&resp_bin);
+//				p.m_data.append((const byte_t*)resp_bin.c_str(), resp_bin.size());
+//			}
+//			else // other cmd
+//			{
+//				std::string str = "ok";
+//				p.m_data.append((const byte_t*)str.c_str(), str.size() + 1);
+//			}
+//			m_packer.packToBin(p, &bin);
+//
+//
+//			if (!m_sapi->sendDataFromSvrTranSocketToClient(m_tran_sid, bin.getData(), bin.getLen()))
+//			{
+//				printf("svr:: fail to sendDataFromSvrTranSocketToClient\n");
+//				return;
+//			}
+//		}
+//		/*	else
+//		{
+//		printf("unknown recv_pack.m_cmd_type\n");
+//		}*/
+//	}
+//
+//
+//
+//	uint64_t m_id_seed;
+//	//uint32_t m_send_seq_seed;
+//	Binary m_recv_data;
+//	SimpleTcpPacker m_packer;
+//	IConsoleAppApi* m_console_api;
+//	TcpSocketCallbackApi* m_sapi;
+//	socket_id_t m_listen_sid;
+//	socket_id_t m_tran_sid;
+//};
+//
+//
+//void __testSocketCallbackSvr()
+//{
+//	printf("\n__testSocketSvr ---------------------------------------------------------\n");
+//	ConsoleApp* app = new ConsoleApp();
+//	__SvrLogic* logic = new __SvrLogic();
+//	app->run(logic);
+//	delete logic;
+//	delete app;
+//}
+//
+//
+//
+
+
+
+//class __TestPackSvrConsoleLogic : public IConsoleAppLogic, public ICallback
+//{
+//private:
+//    virtual void onAppStartMsg(IConsoleAppApi* api)
+//    {
+//        __print("enter msg to send to sever, or 'exit' to quit\n");
+//        initSocketLib();
+//        m_console_api = api;
+//
+//        m_send_seq = 0;
+//
+//        m_client_mgr = new TcpPackClientMgr();
+//        if (!m_client_mgr->init())
+//        {
+//            __print("fail to m_client_mgr->init\n");
+//            m_console_api->exit();
+//            return;
+//        }
+//        TcpPackClientMgr::CreateClientParam param;
+//        //param.m_packer = new STcpPacker(EEncryptMethod_none, ECompressMethod_none);
+//        param.m_packer = new SPlainPacker();
+//        param.m_svr_ip_or_name = "127.0.0.1";
+//        param.m_svr_port = 99001;
+//        param.m_callback = this;
+//        if (!m_client_mgr->createClient(&m_client, param))
+//        {
+//            __print("fail to m_client_mgr->createClient\n");
+//            m_console_api->exit();
+//            return;
+//        }
+//
+//        if (!m_client_mgr->startClient(m_client))
+//        {
+//            __print("fail to m_client_mgr->startClient\n");
+//            m_console_api->exit();
+//            return;
+//        }
+//    }
+//
+//    virtual void onAppStopMsg()
+//    {
+//        m_client_mgr->release();
+//        delete m_client_mgr;
+//        releaseSocketLib();
+//    }
+//
+//    virtual void onTextMsg(const std::string& text)
+//    {
+//        if (text == "exit\n")
+//        {
+//            m_console_api->exit();
+//            return;
+//        }
+//
+//        TcpPackClientMgr::SendPack* send_pack = new TcpPackClientMgr::SendPack();
+//        //send_pack->m_seq = ++m_send_seq;
+//        send_pack->m_seq = 0;
+//        send_pack->m_data = (const byte_t*)(text.c_str());
+//        send_pack->m_data_len = text.size();
+//        m_client_mgr->sendPackToSvr(m_client, send_pack);
+//    }
+//
+//    virtual void onMessage(Message* msg)
+//    {
+//        switch (msg->m_msgType)
+//        {
+//        case 1:
+//            __onMsgConnected(msg);
+//            break;
+//        case 2:
+//            __onMsgRecvRespPackEnd(msg);
+//            break;
+//        case 3:
+//            __onMsgRecvPushPackEnd(msg);
+//            break;
+//        case 4:
+//            __onMsgSendPackEnd(msg);
+//            break;
+//        case 5:
+//            __onMsgClosed(msg);
+//            break;
+//        }
+//    }
+//
+//
+//    virtual void onTcpSocketCallbackApi_clientConnected(socket_id_t client_sid)
+//    {
+//        Message* msg = new Message();
+//        msg->m_msgType = 1;
+//        msg->m_args.setInt64("client_sid", client_sid);
+//        m_console_api->postMessage(msg);
+//    }
+//    virtual void onTcpSocketCallbackApi_clientRecvRespPackEnd(socket_id_t client_sid, int err_code, int64_t send_pack_id, Pack* pack)
+//    {
+//        Message* msg = new Message();
+//        msg->m_msgType = 2;
+//        msg->m_args.setInt64("client_sid", client_sid);
+//        msg->m_args.setInt32("err_code", err_code);
+//        msg->m_args.setInt64("send_pack_id", send_pack_id);
+//        if (pack != NULL)
+//        {
+//            msg->m_args.setInt64("pack_id", pack->m_id);
+//            msg->m_args.setByteArray("pack_data", pack->m_data.getData(), pack->m_data.getLen());
+//            msg->m_args.setInt32("pack_seq", pack->m_seq);
+//        }
+//        m_console_api->postMessage(msg);
+//    }
+//    virtual void onTcpSocketCallbackApi_clientRecvPushPackEnd(socket_id_t client_sid, Pack* pack)
+//    {
+//        Message* msg = new Message();
+//        msg->m_msgType = 3;
+//        msg->m_args.setInt64("client_sid", client_sid);
+//        if (pack != NULL)
+//        {
+//            msg->m_args.setInt64("pack_id", pack->m_id);
+//            msg->m_args.setByteArray("pack_data", pack->m_data.getData(), pack->m_data.getLen());
+//            msg->m_args.setInt32("pack_seq", pack->m_seq);
+//        }
+//        m_console_api->postMessage(msg);
+//    }
+//    virtual void onTcpSocketCallbackApi_clientSendPackEnd(socket_id_t client_sid, int64_t send_pack_id)
+//    {
+//        Message* msg = new Message();
+//        msg->m_msgType = 4;
+//        msg->m_args.setInt64("client_sid", client_sid);
+//        msg->m_args.setInt64("send_pack_id", send_pack_id);
+//        m_console_api->postMessage(msg);
+//    }
+//    virtual void onTcpSocketCallbackApi_clientDisconnected(socket_id_t client_sid)
+//    {
+//        Message* msg = new Message();
+//        msg->m_msgType = 5;
+//        msg->m_args.setInt64("client_sid", client_sid);
+//        m_console_api->postMessage(msg);
+//    }
+//
+//
+//
+//
+//    void __onMsgConnected(Message* msg)
+//    {
+//        __print("__onMsgConnected\n");
+//    }
+//
+//    void __onMsgRecvRespPackEnd(Message* msg)
+//    {
+//        __print("__onMsgRecvRespPackEnd\n");
+//    }
+//
+//    void __onMsgRecvPushPackEnd(Message* msg)
+//    {
+//        __print("__onMsgRecvPushPackEnd\n");
+//        byte_t* pack_data = NULL;
+//        size_t pack_data_len = 0;
+//        msg->m_args.getByteArray("pack_data", &pack_data, &pack_data_len);
+//        std::string str;
+//        str.append((const char*)pack_data, pack_data_len);
+//        __print("recv svr data: %s\n", str.c_str());
+//    }
+//
+//    void __onMsgSendPackEnd(Message* msg)
+//    {
+//        __print("__onMsgSendPackEnd\n");
+//    }
+//
+//    void __onMsgClosed(Message* msg)
+//    {
+//        __print("__onMsgClosed\n");
+//    }
+//
+//    IConsoleAppApi* m_console_api;
+//    TcpPackSvrMgr* m_client_mgr;
+//    socket_id_t m_client;
+//    int m_send_seq;
+//};
+//
+//
+//void __test_pack_svr()
+//{
+//    //ConsoleApp* app = new ConsoleApp();
+//    //__TestPackSvrConsoleLogic* logic = new __TestPackSvrConsoleLogic();
+//    //app->run(logic);
+//    //delete logic;
+//    //delete app;
+//}
+//
+
+
+//
+//
+//
+//
+//
+//
+//
+//
+//class __testSocketApi__testSocketServerRunnable : public IRun
+//{
+//public:
+//    __testSocketApi__testSocketServerRunnable()
+//    {
+//        m_is_exit = false;
+//        m_api = new TcpSocketBlockApi();
+//    }
+//
+//    ~__testSocketApi__testSocketServerRunnable()
+//    {
+//        delete m_api;
+//    }
+//
+//    void run()
+//    {
+//        __print("svr: start\n");
+//
+//        __run();
+//
+//        m_api->closeSocket(m_svrSocket);
+//        m_api->closeSocket(m_clientSocket);
+//        __print("svr: exit\n");
+//    }
+//
+//    void stop()
+//    {
+//        __print("svr: user want to stop sever\n");
+//        m_is_exit = true;
+//        m_api->closeSocket(m_svrSocket);
+//        m_api->closeSocket(m_clientSocket);
+//    }
+//
+//    bool isClientConnected()
+//    {
+//        return SocketUtil::isValidSocket(m_clientSocket);
+//    }
+//
+//    // block and send
+//    bool sendDataToClient(const std::string& str)
+//    {
+//        return __sendDataToClient(str);
+//    }
+//    
+//
+//private:
+//    void __run()
+//    {
+//        if (!m_api->openSocket(&m_svrSocket))
+//        {
+//            __print("svr: fail to openSocket, exit\n");
+//            return;
+//        }
+//
+//        if (!m_api->bindAndListen(m_svrSocket, "127.0.0.1", 99001))
+//        {
+//            __print("svr: fail to bind, exit\n");
+//            return;
+//        }
+//
+//        while (true)
+//        {
+//            // accept client
+//            __print("svr: wait to accept client\n");
+//            if (!m_api->accept(m_svrSocket, &m_clientSocket))
+//            {
+//                if (m_is_exit)
+//                    return;
+//                __print("svr: fail to tcpSocketAccept, exit\n");
+//                return;
+//            }
+//            __print("svr: accept new client\n");
+//
+//            // auto send
+//            if (!__sendDataToClient("hello, I am svr -------------------\n"))
+//            {
+//                m_api->closeSocket(m_clientSocket);
+//                __print("svr: fail to send data to client, maybe client is close\n");
+//                continue;
+//            }
+//
+//            // recv
+//            while (true)
+//            {
+//                byte_t buf[2048];
+//                size_t recvLen = 0;
+//                if (!m_api->recv(m_clientSocket, buf, 2048, &recvLen))
+//                {
+//                    m_api->closeSocket(m_clientSocket);
+//                    if (m_is_exit)
+//                        return;
+//                    __print("svr: fail to recv data from client, maybe client is close\n");
+//                    break;
+//                }
+//
+//                std::string recvData;
+//                recvData.append((const char*)buf, recvLen);
+//                __print("svr: recv data from client, msg=%s\n", recvData.c_str());
+//            }
+//        }
+//    }
+//
+//    bool __sendDataToClient(const std::string& str)
+//    {
+//        if (!SocketUtil::isValidSocket(m_clientSocket))
+//            return false;
+//
+//        if (!m_api->send(m_clientSocket, (const byte_t*)str.c_str(), str.size()))
+//        {
+//            __print("svr: fail to send data to client, close client\n");
+//            m_api->closeSocket(m_clientSocket);
+//            return false;
+//        }
+//        //__print("svr: send data to client\n");
+//        return true;
+//    }
+//
+//    bool m_is_exit;
+//    TcpSocketBlockApi* m_api;
+//    socket_id_t m_svrSocket;
+//    socket_id_t m_clientSocket;
+//};
+//
+//
+//
+//
+//void __testSocketApi__chatServer()
+//{
+//    __print("enter msg to send to client, or 'exit' to quit\n");
+//    __print("--------------------------------------\n");
+//
+//    __testSocketApi__testSocketServerRunnable sr;
+//    Thread st(&sr);
+//    st.start();
+//
+//    while (true)
+//    {
+//        std::string sendStr;
+//        __pauseConsoleAndGetInput(&sendStr);
+//        if (sendStr == "exit\n") {
+//            break;
+//        }
+//        if (!sr.isClientConnected())
+//        {
+//            __print("pls wait until client connected\n");
+//            continue;
+//        }
+//        sr.sendDataToClient(sendStr);
+//    }
+//    sr.stop();
+//    st.join();
+//}
+//
+//
+//void __testSocketApi__autoChatServer()
+//{
+//    __print("auto chat server, will send data to client per 10 ms\n");
+//    __print("--------------------------------------\n");
+//
+//    __testSocketApi__testSocketServerRunnable sr;
+//    Thread st(&sr);
+//    st.start();
+//
+//    while (true)
+//    {
+//        // wait client connect
+//        while (true)
+//        {
+//            Thread::sleep(10);
+//            if (sr.isClientConnected())
+//            {
+//                break;
+//            }
+//        }
+//
+//        // send data to client
+//        int i = 0;
+//        while (true)
+//        {
+//            Thread::sleep(500);
+//            if (!sr.isClientConnected())
+//            {
+//                break;
+//            }
+//
+//            i++;
+//            __print("send data to client, count=%i\n", i);
+//            std::string sendStr = "hello, i am svr, count=" + StringUtil::toString(i);
+//            if (!sr.sendDataToClient(sendStr))
+//                break;
+//        }
+//
+//        Thread::sleep(10);
+//        //__print("enter 'exit' to quit, or the other msg to continue\n");
+//        //std::string sendStr;
+//        //__pauseConsoleAndGetInput(&sendStr);
+//        //if (sendStr == "exit\n") {
+//        //    break;
+//        //}
+//        __print("continue, wait client----------------------\n");
+//    }
+//    
+//    sr.stop();
+//    st.join();
+//}
+//
+//
+//
+//
+//void __testSocketApi()
+//{
+//    //__print("__testSocketApi");
+//    if (!initSocketLib())
+//    {
+//        __print("fail to initSocketLib");
+//        return;
+//    }
+//
+//    //__testGetIpByName();
+//
+//    //__testSocketApi__testSocketServerAndClient();
+//    //__testSocketApi__testSelectEvent();
+//    //__testSocketApi__testSelectClient();
+//
+//    //__testSocketApi__testIoOverlap();
+//    //__testSocketApi__chatClient();
+//    //__testSocketApi__chatServer();
+//    //__testSocketApi__autoChatServer();
+//    //__testSocketApi__autoChatClient();
+//
+//    //__test_socket_callback_client();
+//
+//    //releaseSocketLib();
+//}
