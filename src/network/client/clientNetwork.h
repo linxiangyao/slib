@@ -25,6 +25,8 @@ for good perfromance, network has no lock and is thread unsafe.
 all the functions should be called in m_work_looper thread(typical is main thread), and will be callbacked in the same thread.
 there may be many networks in one thread.
 network may be in the same thread of ITcpSocketCallbackApi, or may not be.
+one ITcpSocketCallbackApi may be used by many networks.
+
 */
 class ClientNetwork : public IMessageHandler, public IMessageTimerHandler
 {
