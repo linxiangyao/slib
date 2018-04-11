@@ -1,29 +1,13 @@
 #include "../../comm/comm.h"
 //#define S_OS_LINUX
 #if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
-//#include <errno.h>
-//#include <string.h>
-//#include <stdlib.h>
-//
-//#include <netdb.h>
-//#include <arpa/inet.h>
-//#include <sys/ioctl.h>
-//#include <fcntl.h>
-//#include <stdio.h>
-//#include <sys/types.h>
-//#include <sys/socket.h>
-//#include <netinet/in.h>
-//#include <arpa/inet.h>
-//#include <unistd.h>
-//#include <sys/shm.h>
-
 #include "socketApi_linux.h"
 S_NAMESPACE_BEGIN
 
 
 
 
-// global funtion ------------------------------------------------------------------------
+// public static funtion ------------------------------------------------------------------------
 bool initSocketLib()
 {
     return true;
@@ -36,7 +20,7 @@ void releaseSocketLib()
 
 
 
-// static inner funtion ------------------------------------------------------------------------
+// inner static funtion ------------------------------------------------------------------------
 static bool __bindAndListen(int s_svr, const std::string& svr_ip_or_name, int svr_port)
 {
     uint32_t svrIp = 0;
@@ -499,8 +483,7 @@ bool TcpSocketBlockApi::__getSocketBySid(int64_t sid, int* s)
 
 
 // TcpSocketCallbackApi --------------------------------------------------------------------------------------
-
-// __ClientThreadRun --------------------------------------------------------------------------------------
+// __ClientThreadRun --
 class __ClientThreadRun : public IThreadRun
 {
 public:
@@ -1024,7 +1007,8 @@ private:
 
 
 
-// __SvrThreadRun --------------------------------------------------------------------------------------
+
+// __SvrThreadRun --
 class __SvrThreadRun : public IThreadRun
 {
 public:
@@ -1548,7 +1532,7 @@ private:
 
 
 
-// init --------------------------------------------------------------------------------------
+// init --
 TcpSocketCallbackApi::TcpSocketCallbackApi()
 {
 	slog_d("new TcpSocketCallbackApi=%0", (uint64_t)this);
@@ -1584,7 +1568,7 @@ bool TcpSocketCallbackApi::init(MessageLooper * work_looper)
 }
 
 
-// client interface --------------------------------------------------------------------------------------
+// client interface --
 bool TcpSocketCallbackApi::createClientSocket(socket_id_t* client_sid, const CreateClientSocketParam& param)
 {
     if(client_sid == NULL)
@@ -1692,9 +1676,7 @@ uint32_t TcpSocketCallbackApi::getClientSocketSvrPort(socket_id_t client_sid)
 }
 
 
-
-
-// svr interface --------------------------------------------------------------------------------------
+// svr interface --
 bool TcpSocketCallbackApi::createSvrListenSocket(socket_id_t* svr_listen_sid, const CreateSvrSocketParam& param)
 {
 	if (svr_listen_sid == NULL)
@@ -1801,7 +1783,10 @@ uint32_t TcpSocketCallbackApi::getSvrListenSocketPort(socket_id_t svr_listen_sid
 
 
 
-// message --------------------------------------------------------------------------------------
+
+
+
+// private --
 void TcpSocketCallbackApi::onMessage(Message* msg, bool* isHandled)
 {
 	if (msg->m_target != this)
@@ -2011,10 +1996,6 @@ void TcpSocketCallbackApi::__onMsg_SvrTransSocketClosed(Message* msg)
 
 
 
-
-
-
-// helper funtion --------------------------------------------------------------------------------------
 bool TcpSocketCallbackApi::__initClientThread()
 {
 	if (m_client_thread != NULL)
@@ -2169,128 +2150,3 @@ S_NAMESPACE_END
 #endif
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//ITcpSocketCallbackApi* ITcpSocketCallbackApi::newCallbackApi()
-//{
-//	return new TcpSocketCallbackApi();
-//}
-//static bool __recvAll(int s, byte_t* buf, size_t buf_len, Binary* bin)
-//{
-//	while (true)
-//	{
-//		size_t recv_len = 0;
-//		if (! SocketUtil::recv(s, buf, buf_len, &recv_len))
-//			return false;
-//
-//        bin->append(buf, recv_len);
-//
-//		if (recv_len < buf_len)
-//		{
-//			return true;
-//		}			
-//		else if (recv_len == buf_len)
-//		{
-//			if (bin->getLen() > 10 * 1024 * 1024)
-//				return true;
-//			else
-//				continue;
-//		}
-//		else
-//		{
-//			printf("__recvAll err \n");
-//			return false;
-//		}
-//	}
-//}
-//
-//static bool __recvAll(int s, Binary* bin)
-//{
-//	byte_t buf[64 * 1024];
-//	return __recvAll(s, buf, 64 * 1024, bin);
-//}
-//slog_v("tran socket can read");
-//std::list<Binary*> datas;
-//
-//while (true)
-//{
-//	size_t recv_len = 0;
-//	if (!SocketUtil::recv(ctx->m_socket, m_recv_buf, SOCKET_API_SVR_RECV_BUF_SIZE, &recv_len))
-//	{
-//		slog_d("fail to recv, maybe closed");
-//		return false;
-//	}
-
-//	if (recv_len > 0)
-//	{
-//		Binary* bin = new Binary();
-//		bin->copy(m_recv_buf, recv_len);
-//		datas.push_back(bin);
-//	}
-//	if (recv_len != SOCKET_API_SVR_RECV_BUF_SIZE)
-//		break;
-
-//	if (datas.size() > 20)
-//		break;
-//}
-
-//__notifyBatchMsgs_svrTranSocketRecvData(*ctx, &datas);
-
-//if(once_recv_send_msg_count > 1)
-//	slog_e("recv once, and send msgs=%0", once_recv_send_msg_count);
-
-////if(once_recv_send_msg_count > 1)
-////	slog_e("recv once, and send msgs=%0", once_recv_send_msg_count);
-
-
-//size_t recv_len = 0;
-//byte_t buf[64 * 1024];
-//if (!SocketUtil::recv(ctx->m_socket, buf, 64 * 1024, &recv_len))
-//{
-//	slog_d("fail to recv, maybe closed");
-//	return false;
-//}
-//if (recv_len > 0)
-//{
-//	Binary bin;
-//	bin.copy(buf, recv_len);
-//	__notifyMsg_svrTranSocketRecvData(*ctx, bin.getData(), bin.getLen());
-//	bin.detach();
-//}
-
-//void __notifyBatchMsgs_svrTranSocketRecvData(const __SvrTranSocketCtx& ctx, std::list<Binary*>* datas)
-//{
-//	//slog_e("__notifyBatchMsgs_svrTranSocketRecvData");
-//	std::list<Message*> msgs;
-//	for (std::list<Binary*>::iterator it = datas->begin(); it != datas->end(); ++it)
-//	{
-//		Binary* bin = *it;
-//		Message* msg = new Message();
-//		msg->m_sender = this;
-//		msg->m_target = m_notify_target;
-//		msg->m_msg_type = EMsgType_svrTranSocketRecvData;
-//		msg->m_args.set("svr_listen_socket", ctx.m_ref_listen_socket);
-//		msg->m_args.set("svr_tran_socket", ctx.m_socket);
-//		msg->m_args.setByteArrayAndAttachFrom("data", bin);
-//		msgs.push_back(msg);
-//	}
-//	//slog_e("__notifyBatchMsgs_svrTranSocketRecvData 1");
-//	delete_and_erase_collection_elements(datas);
-
-//	//slog_e("__notifyBatchMsgs_svrTranSocketRecvData 2");
-//	m_notify_looper->postMessages(&msgs);
-//	//slog_e("__notifyBatchMsgs_svrTranSocketRecvData 3");
-//}
