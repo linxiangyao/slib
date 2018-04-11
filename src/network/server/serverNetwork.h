@@ -4,7 +4,6 @@
 SSVR_NAMESPACE_BEGIN
 
 
-//typedef uint64_t session_id_t;
 
 class session_id_t
 {
@@ -38,9 +37,16 @@ if client send pack to server ok, server network will post recv_pack_from_client
 if server send pack to client ok. server network will post send_pack_to_client_end message.
 
 
-note:
-for good perfromance, network has no lock and is thread unsafe.
-all the functions should be called in m_work_looper thread(typical is main thread).
+
+
+NOTE:
+	for good perfromance, network has no lock and is thread unsafe,
+	all the functions should be called in m_work_looper thread(typical is main thread), and will be callbacked in the same thread.
+
+	there may be many networks in one thread.
+
+	one ITcpSocketCallbackApi may be used by many networks.
+	ITcpSocketCallbackApi may be in the same thread of network, or may not be.
 */
 class ServerNetwork : public IMessageHandler, public IMessageTimerHandler
 {

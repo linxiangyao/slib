@@ -8,8 +8,7 @@ SCLIENT_NAMESPACE_BEGIN
 
 
 /*
-
-one network bind to one server. if there are two servers, there are two networks.
+client network.
 
 auto connect.
 auto retry send pack.
@@ -21,12 +20,15 @@ network speed test, choice fastest svr.
 
 
 NOTE:
-for good perfromance, network has no lock and is thread unsafe.
-all the functions should be called in m_work_looper thread(typical is main thread), and will be callbacked in the same thread.
-there may be many networks in one thread.
-network may be in the same thread of ITcpSocketCallbackApi, or may not be.
-one ITcpSocketCallbackApi may be used by many networks.
+	one client network bind to one server. if there are two servers, there are two client networks.
 
+	for good perfromance, network has no lock and is thread unsafe,
+	all the functions should be called in m_work_looper thread(typical is main thread), and will be callbacked in the same thread.
+
+	there may be many networks in one thread.
+
+	one ITcpSocketCallbackApi may be used by many networks.
+	ITcpSocketCallbackApi may be in the same thread of network, or may not be.
 */
 class ClientNetwork : public IMessageHandler, public IMessageTimerHandler
 {
