@@ -9,9 +9,6 @@ S_NAMESPACE_BEGIN
 
 
 
-
-
-// lib
 bool initSocketLib();
 void releaseSocketLib();
 
@@ -19,7 +16,9 @@ void releaseSocketLib();
 
 
 
-
+/*
+block tcp function.
+*/
 class ITcpSocketBlockApi
 {
 public:
@@ -52,8 +51,15 @@ public:
 
 
 /*
-	run in work_looper,
-	and will post message to callback_looper.
+none block tcp function.
+
+
+NOTE:
+ITcpSocketCallbackApi is thread safe.
+init(MessageLooper* work_looper)
+	1. if work_looper != null: ITcpSocketCallbackApi will run in the message looper thread which own the work_looper.
+	2. if work_looper == null: ITcpSocketCallbackApi will create a message looper thead and run in the thread.
+ITcpSocketCallbackApi will post message to callback_looper.
 */
 class ITcpSocketCallbackApi
 {

@@ -529,6 +529,8 @@ TcpSocketCallbackApi::TcpSocketCallbackApi()
 {
 	slog_d("new TcpSocketCallbackApi=%0", (uint64_t)this);
     m_sid_seed = 0;
+	m_work_looper = nullptr;
+	m_work_thread = nullptr;
 }
 
 TcpSocketCallbackApi::~TcpSocketCallbackApi()
@@ -549,15 +551,44 @@ TcpSocketCallbackApi::~TcpSocketCallbackApi()
 	{
 		__releaseSvrTranSocket(m_svr_tran_ctx_map.begin()->second->m_sid);
 	}
-	m_work_looper->removeMsgHandler(this);
+
+	if (m_work_thread != NULL)
+	{
+		m_work_thread->stopAndJoin();
+		delete m_work_thread;
+	}
+	else
+	{
+		m_work_looper->removeMsgHandler(this);
+	}
 }
 
 bool TcpSocketCallbackApi::init(MessageLooper * work_looper)
 {
 	slog_d("init TcpSocketCallbackApi");
 	ScopeMutex __l(m_mutex);
-	m_work_looper = work_looper;
-	m_work_looper->addMsgHandler(this);
+	if (m_work_looper != nullptr)
+	{
+		slog_w("m_work_looper != nullptr");
+		return true;
+	}
+
+	if (work_looper == nullptr)
+	{
+		m_work_thread = new MessageLoopThread(this, false);
+		m_work_looper = m_work_thread->getLooper();
+		if (!m_work_thread->start())
+		{
+			slog_e("fail to start work_thread");
+			return false;
+		}
+	}
+	else
+	{
+		m_work_looper = work_looper;
+		m_work_looper->addMsgHandler(this);
+	}
+
 	return true;
 }
 
@@ -814,6 +845,10 @@ void TcpSocketCallbackApi::onMessage(Message* msg, bool* isHandled)
 		case __EMsgType_onSvrTransSocketClosed: __onSvrTransSocketClosedMsg(msg); break;
 		}
 	}
+}
+
+void TcpSocketCallbackApi::onMessageTimerTick(uint64_t timer_id, void * user_data)
+{
 }
 
 void TcpSocketCallbackApi::__onClientConnectedMsg(Message * msg)
@@ -1108,6 +1143,7 @@ Thread* TcpSocketCallbackApi::__getThreadById(socket_id_t sid)
         return NULL;
     return it->second;
 }
+
 
 
 
@@ -1606,23 +1642,3 @@ void TcpSocketCallbackApi::__SvrTransRun::__clearSession()
 S_NAMESPACE_END
 #endif
 
-
-
-//static bool __recvAll(SOCKET s, byte_t* buf, size_t bufLen, Binary* bin)
-//{
-//	while (true)
-//	{
-//		size_t recvLen = 0;
-//		if (!SocketUtil::recv(s, buf, bufLen, &recvLen))
-//			return false;
-//		if (recvLen == 0)
-//			return true;
-//		bin->append(buf, recvLen);
-//	}
-//}
-//
-//static bool __recvAll(SOCKET s, Binary* bin)
-//{
-//	byte_t buf[64 * 1024];
-//	return __recvAll(s, buf, 64 * 1024, bin);
-//}

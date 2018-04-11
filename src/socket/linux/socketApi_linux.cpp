@@ -483,6 +483,7 @@ bool TcpSocketBlockApi::__getSocketBySid(int64_t sid, int* s)
 
 
 // TcpSocketCallbackApi --------------------------------------------------------------------------------------
+
 // __ClientThreadRun --
 class __ClientThreadRun : public IThreadRun
 {
@@ -1537,6 +1538,8 @@ TcpSocketCallbackApi::TcpSocketCallbackApi()
 {
 	slog_d("new TcpSocketCallbackApi=%0", (uint64_t)this);
 	m_sid_seed = 0;
+	m_work_looper = nullptr;
+	m_work_thread = nullptr;
 	m_client_thread = NULL;
 	m_svr_thread = NULL;
 }
@@ -1545,7 +1548,7 @@ TcpSocketCallbackApi::~TcpSocketCallbackApi()
 {
 	slog_d("delete TcpSocketCallbackApi=%0", (uint64_t)this);
 	ScopeMutex __l(m_mutex);
-	m_work_looper->removeMsgHandler(this);
+
 	if (m_client_thread != NULL)
 	{
 		m_client_thread->stopAndJoin();
@@ -1556,14 +1559,43 @@ TcpSocketCallbackApi::~TcpSocketCallbackApi()
 		m_svr_thread->stopAndJoin();
 		delete m_svr_thread;
 	}
+
+	if (m_work_thread != NULL)
+	{
+		m_work_thread->stopAndJoin();
+		delete m_work_thread;
+	}
+	else
+	{
+		m_work_looper->removeMsgHandler(this);
+	}
 }
 
 bool TcpSocketCallbackApi::init(MessageLooper * work_looper)
 {
 	slog_d("init TcpSocketCallbackApi");
 	ScopeMutex __l(m_mutex);
-	m_work_looper = work_looper;
-	m_work_looper->addMsgHandler(this);
+	if (m_work_looper != nullptr)
+	{
+		slog_w("m_work_looper != nullptr");
+		return true;
+	}
+
+	if (work_looper == nullptr)
+	{
+		m_work_thread = new MessageLoopThread(this, false);
+		m_work_looper = m_work_thread->getLooper();
+		if (!m_work_thread->start())
+		{
+			slog_e("fail to start work_thread");
+			return false;
+		}
+	}
+	else
+	{
+		m_work_looper = work_looper;
+		m_work_looper->addMsgHandler(this);
+	}
 	return true;
 }
 
@@ -1830,6 +1862,10 @@ void TcpSocketCallbackApi::onMessage(Message* msg, bool* isHandled)
 	default:
 		break;
 	}
+}
+
+void TcpSocketCallbackApi::onMessageTimerTick(uint64_t timer_id, void * user_data)
+{
 }
 
 void TcpSocketCallbackApi::__onMsg_ClientSocketConnected(Message* msg)
@@ -2142,6 +2178,7 @@ TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrTranCtxBySocket
 	}
 	return NULL;
 }
+
 
 
 

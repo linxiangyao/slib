@@ -190,6 +190,8 @@ protected:
 		std::map<uint32_t, ClientCgiInfo> m_cgi_infos;
 	};
 
+
+
 	virtual void onMessage(Message* msg, bool* is_handled) override
 	{
 		if (msg->m_target != this)

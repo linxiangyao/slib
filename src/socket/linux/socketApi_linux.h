@@ -64,12 +64,9 @@ private:
 
 
 // callback api ----------------------------------------------------------------------------------------------------------
-//class __ClientThreadRunMsg_CmdConnectSvr;
-//class __ClientThreadRunMsg_SendDataToSvr;
-//class __ClientThreadRun;
 #define INVALID_SOCKET 0
 
-class TcpSocketCallbackApi : public ITcpSocketCallbackApi, private IMessageHandler
+class TcpSocketCallbackApi : public ITcpSocketCallbackApi, private IMessageLoopHandler
 {
 public:
     TcpSocketCallbackApi();
@@ -116,8 +113,9 @@ private:
     };
 
 
-	// IMessageHandler
-	virtual void onMessage(Message * msg, bool* isHandled);
+	// IMessageLoopHandler
+	virtual void onMessage(Message * msg, bool* isHandled) override;
+	virtual void onMessageTimerTick(uint64_t timer_id, void * user_data) override;
 
 	void __onMsg_ClientSocketConnected(Message* msg);
 	void __onMsg_ClientSocketRecvData(Message* msg);
@@ -156,6 +154,7 @@ private:
 
 
 	MessageLooper* m_work_looper;
+	MessageLoopThread* m_work_thread;
     Mutex m_mutex;
 	int64_t m_sid_seed;
 	typedef std::map<socket_id_t, __SocketCtx*> CtxMap;
@@ -173,115 +172,3 @@ S_NAMESPACE_END
 #endif //defined(S_OS_LINUX) | defined(S_OS_MAC)
 #endif //S_SOCKET_API_LINUX_H_
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//std::map<int64_t, __SocketCtx*> m_sid_2_socket;
-//std::vector<Thread*> m_acceptThreads;
-//std::vector<Thread*> m_transThreads;
-//std::vector<Thread*> m_clientThreads;
-//   
-//   class __SocketPair
-//   {
-//   public:
-//       int64_t m_sid;
-//       int m_socket;
-//   };
-//   
-//   
-//   
-//   class __AcceptRun : public IThreadRun
-//   {
-//   public:
-//       __AcceptRun(TcpSocketCallbackApi* api);
-//       virtual void run();
-//       virtual void stop();
-//       void addAcceptSocket(const __SocketPair& s);
-//       bool sendDataToClient(socket_id_t client_sid, const byte_t* data, size_t data_len);
-//       
-//       
-//   private:
-//       bool m_is_exit;
-//       Mutex m_mutex;
-//       std::vector<__SocketPair> m_sockets;
-//       TcpSocketCallbackApi* m_api;
-//       int m_pipe[2];
-//   };
-//   
-//   
-//   
-//   class __ClientRun : public IThreadRun
-//   {
-//   public:
-//       virtual void run();
-//       virtual void stop();
-//       bool addClientSocket(const __SocketPair& s);
-//       bool sendDataToSvr(socket_id_t client_sid, const byte_t* data, size_t data_len);
-//       
-//       
-//   private:
-//       enum __EClientConnectState
-//       {
-//           __EClientConnectState_none,
-//           __EClientConnectState_connecting,
-//           __EClientConnectState_connected,
-//       };
-//       
-//       class __ClientCtx
-//       {
-//       public:
-//           __ClientCtx() { m_sid = 0; m_socket = 0; m_connect_state = __EClientConnectState_none; }
-//           
-//           int64_t m_sid;
-//           int m_socket;
-//           std::string m_svr_ip_or_name;
-//           int m_svr_port;
-//           __EClientConnectState m_connect_state;
-//           Binary m_data_to_send;
-//       };
-//       
-//       
-//       bool m_is_exit;
-//       Mutex m_mutex;
-//       std::vector<__ClientCtx*> m_clients;
-//       int m_pipe[2];
-//   };
-//   
-//   
-//   
-//   class __TransRun : public IThreadRun
-//   {
-//   public:
-//       virtual void run();
-//       virtual void stop();
-//       
-//       bool addClientSocket(const __SocketPair& s);
-//       bool sendDataToSvr(socket_id_t client_sid, const byte_t* data, size_t data_len);
-//       
-//       
-//   private:
-//       bool m_is_exit;
-//       Mutex m_mutex;
-//       std::vector<__SocketPair> m_sockets;
-//       int m_pipe[2];
-//   };
-//   
-//   
-//   
-//   
-//   
-//   void __onAcceptClient(socket_id_t accept_sid, int trans_socket);
-//   __SocketCtx* __getSocketCtxById(int64_t socket_id);
-//   void __addSocketCtx(__SocketCtx* ctx);
-//

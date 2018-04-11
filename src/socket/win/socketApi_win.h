@@ -61,7 +61,7 @@ private:
 
 
 
-class TcpSocketCallbackApi : public ITcpSocketCallbackApi, private IMessageHandler
+class TcpSocketCallbackApi : public ITcpSocketCallbackApi, private IMessageLoopHandler
 {
 public:
     TcpSocketCallbackApi();
@@ -214,8 +214,9 @@ private:
 		byte_t m_recv_buf[SOCKET_API_SVR_RECV_BUF_SIZE];
     };
 
-	// IMessageHandler
+	// IMessageLoopHandler
 	virtual void onMessage(Message * msg, bool* isHandled) override;
+	virtual void onMessageTimerTick(uint64_t timer_id, void * user_data) override;
 	
 	void __onClientConnectedMsg(Message* msg);
 	void __onClientDisconnectedMsg(Message* msg);
@@ -249,6 +250,7 @@ private:
 
     Mutex m_mutex;
 	MessageLooper* m_work_looper;
+	MessageLoopThread* m_work_thread;
 	typedef std::map<socket_id_t, __SocketCtx*> CtxMap;
 	CtxMap m_client_ctx_map;
 	CtxMap m_svr_listen_ctx_map;
