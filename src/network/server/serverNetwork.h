@@ -227,13 +227,7 @@ private:
 	void __postClientConnectedMsgToTarget(socket_id_t client_sid);
 	void __postClientDisconnectedMsgToTarget(socket_id_t client_sid);
 	__Client* __getClientBySid(socket_id_t sid);
-	ServerCgiInfo* __getServerCgiInofoBySendCmdType(uint32_t send_cmd_type)
-	{
-		auto it = m_init_param.m_send_cmd_type_to_cgi_info_map.find(send_cmd_type);
-		if (it == m_init_param.m_send_cmd_type_to_cgi_info_map.end())
-			return nullptr;
-		return &it->second;
-	}
+	ServerCgiInfo* __getServerCgiInofoBySendCmdType(uint32_t send_cmd_type);
 
 
 

@@ -441,7 +441,6 @@ void ServerNetwork::__onSendPackMsg()
 
 
 // private function ----------------------------------------------------------
-
 void ServerNetwork::__stop()
 {
 	if (!m_is_running)
@@ -568,6 +567,20 @@ ServerNetwork::__Client* ServerNetwork::__getClientBySid(socket_id_t sid)
 		return NULL;
 	return it->second;
 }
+
+ServerCgiInfo * ServerNetwork::__getServerCgiInofoBySendCmdType(uint32_t send_cmd_type)
+{
+	auto it = m_init_param.m_send_cmd_type_to_cgi_info_map.find(send_cmd_type);
+	if (it == m_init_param.m_send_cmd_type_to_cgi_info_map.end())
+		return nullptr;
+	return &it->second;
+}
+
+
+
+
+
+
 
 int ServerNetwork::__Client::getSpiIndexBySendPackId(uint64_t send_pack_id)
 {
