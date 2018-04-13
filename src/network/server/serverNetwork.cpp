@@ -3,34 +3,6 @@ SSVR_NAMESPACE_BEGIN
 
 
 
-bool operator < (const session_id_t & l, const session_id_t & r)
-{
-	for (size_t i = 0; i < 16; ++i)
-	{
-		if (l.m_data[i] < r.m_data[i])
-			return true;
-		else if (l.m_data[i] > r.m_data[i])
-			return false;
-	}
-	return false;
-}
-
-bool operator == (const session_id_t & l, const session_id_t & r)
-{
-	for (size_t i = 0; i < 16; ++i)
-	{
-		if (l.m_data[i] != r.m_data[i])
-			return false;
-	}
-	return true;
-}
-
-bool operator != (const session_id_t& l, const session_id_t& r)
-{
-	return !(l == r);
-}
-
-
 uint64_t ServerNetwork::s_send_pack_id_seed = 0;
 
 
@@ -41,14 +13,12 @@ ServerNetwork::ServerNetwork()
 	slog_d("new ServerNetwork=%0", (uint64_t)this);
 	m_is_running = false;
 	m_listen_sid = 0;
-	//m_timer = NULL;
 	m_timer_id = 0;
 }
 
 ServerNetwork::~ServerNetwork()
 {
 	slog_d("delete ServerNetwork=%0", (uint64_t)this);
-	//ScopeMutex __l(m_mutex);
 	__stop();
 	if (m_init_param.m_sapi != NULL)
 	{
@@ -56,16 +26,23 @@ ServerNetwork::~ServerNetwork()
 			m_init_param.m_sapi->releaseSvrListenSocket(m_listen_sid);
 		m_init_param.m_work_looper->releasseTimer(m_timer_id);
 	}
+	slog_d("delete ServerNetwork=%0 end", (uint64_t)this);
 }
 
 bool ServerNetwork::init(const InitParam& init_param)
 {
 	slog_d("init server network");
+	if (m_init_param.m_callback != nullptr)
+	{
+		slog_d("ServerNetwork::init m_init_param.m_callback != nullptr, maybe already init? ignore.");
+		return true;
+	}
+
 	if (init_param.m_callback == NULL || init_param.m_unpacker == NULL || init_param.m_sapi == NULL 
 		|| init_param.m_work_looper == NULL || init_param.m_svr_port == 0 || init_param.m_svr_ip_or_name.size() == 0
 		|| init_param.m_send_cmd_type_to_cgi_info_map.size() == 0)
 	{
-		slog_e("init network fail, param is invalid.");
+		slog_e("ServerNetwork::init fail, param is invalid.");
 		return false;
 	}
 
@@ -77,9 +54,9 @@ bool ServerNetwork::init(const InitParam& init_param)
 bool ServerNetwork::start()
 {
 	slog_d("start server network");
-	//ScopeMutex __l(m_mutex);
 	if (m_is_running)
-		return true;
+		return true;		
+
 	m_init_param.m_work_looper->addMsgHandler(this);
 	m_init_param.m_work_looper->addMsgTimerHandler(this);
 
@@ -90,17 +67,17 @@ bool ServerNetwork::start()
 	param.m_svr_port = m_init_param.m_svr_port;
 	if (!m_init_param.m_sapi->createSvrListenSocket(&m_listen_sid, param))
 	{
-		slog_e("fail to createSvrListenSocket");
+		slog_e("ServerNetwork::start fail to createSvrListenSocket");
 		return false;
 	}
 	if (!m_init_param.m_sapi->startSvrListenSocket(m_listen_sid))
 	{
-		slog_e("fail to startSvrListenSocket");
+		slog_e("ServerNetwork::start fail to startSvrListenSocket");
 		return false;
 	}
 	if (!m_init_param.m_work_looper->startTimer(m_timer_id, 1, 1))
 	{
-		slog_e("fail to startTimer");
+		slog_e("ServerNetwork::start fail to startTimer");
 		return false;
 	}
 
@@ -111,15 +88,24 @@ bool ServerNetwork::start()
 void ServerNetwork::stop()
 {
 	slog_d("stop server network");
-	//ScopeMutex __l(m_mutex);
 	__stop();
+	slog_d("stop server network end");
 }
 
 ServerNetwork::SendPack * ServerNetwork::newSendPack(socket_id_t sid, session_id_t ssid, uint32_t send_cmd_type, uint32_t send_seq)
 {
 	ServerCgiInfo* cgi_info = __getServerCgiInofoBySendCmdType(send_cmd_type);
 	if (cgi_info == NULL)
+	{
+		slog_d("ServerNetwork::newSendPack fail to find cgi info, send_cmd_type=%0", send_cmd_type);
 		return nullptr;
+	}
+
+	if (cgi_info->m_cgi_type == EServerCgiType_s2cPush && send_seq != 0)
+	{
+		slog_e("ServerNetwork::newSendPack fail, cgi_type=push, and send_seq != 0, send_seq=%0", send_seq);
+		return nullptr;
+	}
 
 	SendPack* send_pack = new SendPack();
 	send_pack->m_send_pack_id = ++s_send_pack_id_seed;
@@ -127,64 +113,42 @@ ServerNetwork::SendPack * ServerNetwork::newSendPack(socket_id_t sid, session_id
 	send_pack->m_send_seq = send_seq;
 	send_pack->m_sid = sid;
 	send_pack->m_ssid = ssid;
-
-	if (cgi_info->m_cgi_type == EServerCgiType_c2sReq_s2cResp)
-	{
-		// user sholud set send_seq
-	}
-	else if (cgi_info->m_cgi_type == EServerCgiType_s2cReq_c2sResp)
-	{
-		//ScopeMutex l(m_mutex);
-		__Client* client = __getClientBySid(sid);
-		if (client == nullptr)
-			return nullptr;
-		send_pack->m_send_seq = ++client->m_send_seq_seed;
-	}
-	else if (cgi_info->m_cgi_type == EServerCgiType_s2cPush)
-	{
-		send_pack->m_send_seq = 0;
-	}
-	else
-	{
-		delete send_pack;
-		return nullptr;
-	}
-
+	
 	return send_pack;
 }
 
 bool ServerNetwork::sendPackToClient(const SendPack& send_pack)
 {
-	//ScopeMutex __l(m_mutex);
 	if (!m_is_running)
 	{
-		slog_e("fail to send pack, !m_is_running! %0", send_pack.toOverviewString());
+		slog_e("ServerNetwork::sendPackToClient fail, !m_is_running! %0", send_pack.toOverviewString());
 		return false;
 	}
+
 	if (send_pack.m_send_whole_pack_bin.getLen() == 0)
 	{
-		slog_e("fail to send pack, len == 0! %0", send_pack.toOverviewString());
+		slog_e("ServerNetwork::sendPackToClient fail, len == 0! %0", send_pack.toOverviewString());
 		return false;
 	}
 
 	ServerCgiInfo* cgi_info = __getServerCgiInofoBySendCmdType(send_pack.m_send_cmd_type);
 	if (cgi_info == nullptr)
 	{
-		slog_e("fail to send pack, cgi_info == null! %0", send_pack.toOverviewString());
+		slog_e("ServerNetwork::sendPackToClient fail, cgi_info == null! %0", send_pack.toOverviewString());
 		return false;
 	}
 	if ((cgi_info->m_cgi_type == EServerCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0)
 		|| (cgi_info->m_cgi_type == EServerCgiType_s2cPush && send_pack.m_send_seq != 0)
 		|| (cgi_info->m_cgi_type == EServerCgiType_s2cReq_c2sResp && send_pack.m_send_seq == 0))
 	{
-		slog_e("fail to send pack, invalid send_seq! %0", send_pack.toOverviewString());
+		slog_e("ServerNetwork::sendPackToClient fail, invalid send_seq! %0", send_pack.toOverviewString());
 		return false;
 	}
 
 	__Client* c = __getClientBySid(send_pack.m_sid);
 	if (c == NULL)
 	{
-		slog_e("fail to send pack, __Client == null! %0", send_pack.toOverviewString());
+		slog_e("ServerNetwork::sendPackToClient fail, __Client == null! %0", send_pack.toOverviewString());
 		return false;
 	}
 
@@ -201,7 +165,6 @@ bool ServerNetwork::sendPackToClient(const SendPack& send_pack)
 
 void ServerNetwork::cancelSendPackToClient(socket_id_t client_sid, uint64_t send_pack_id)
 {
-	//ScopeMutex __l(m_mutex);
 	slog_d("cancel send pack to client, sid=%0, send_pack_id=%1", client_sid, send_pack_id);
 	if (!m_is_running)
 		return;
@@ -227,7 +190,6 @@ void ServerNetwork::cancelSendPackToClient(socket_id_t client_sid, uint64_t send
 void ServerNetwork::disconnectClient(socket_id_t client_sid)
 {
 	slog_d("disconnectClient, sid=%0", client_sid);
-	//ScopeMutex __l(m_mutex);
 	if (!m_is_running)
 		return;
 

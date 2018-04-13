@@ -8,11 +8,14 @@ SSVR_NAMESPACE_BEGIN
 
 class ServerCgiMgr : public IMessageLoopHandler, public ServerNetwork::ICallback
 {
+#define ServerCgiMgr_MSG_TYPE_BEGIN 815657
+
 public:
 	typedef ServerCgi::RecvPack RecvPack;
+
 	enum EMsgType
 	{
-		EMsgType_sessionTimeOut = ServerSessionManager_MSG_BEGIN + 1,
+		EMsgType_sessionTimeOut = ServerCgiMgr_MSG_TYPE_BEGIN + 1,
 	};
 
 	class ICallback
@@ -46,6 +49,7 @@ public:
 	void refreashSessionLife(session_id_t ssid);
 	bool startCgi(ServerCgi* cgi);
 	void stopCgi(ServerCgi* cgi);
+
 
 
 private:

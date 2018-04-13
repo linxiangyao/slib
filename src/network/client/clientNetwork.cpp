@@ -6,19 +6,21 @@ SCLIENT_NAMESPACE_BEGIN
 // interface --------------------------------------------------------------
 ClientNetwork::ClientNetwork()
 {
-	sscope_d();
+	slog_d("new ClientNetwork=%0", (uint64_t)this);
 	m_is_running = false;
 	m_timer_id = 0;
-	//m_pack_id_seed = 0;
-	//m_send_seq_seed = 0;
+
+	m_is_repeat_last_connect_interval_ms = true;
 	m_last_reconnect_time_ms = 0;
 	m_connect_count = 0;
+
 	m_speed_tester = NULL;
+	m_is_testing_speed = false;
 }
 
 ClientNetwork::~ClientNetwork()
 {
-	sscope_d();
+	slog_d("delete ClientNetwork=%0", (uint64_t)this);
 	stop();
 	m_init_param.m_sapi->releaseClientSocket(m_client_ctx.m_sid);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
@@ -26,11 +28,11 @@ ClientNetwork::~ClientNetwork()
 
 bool ClientNetwork::init(const InitParam& param)
 {
-	sscope_d();
+	slog_d("init ClientNetwork");
 	if (param.m_sapi == NULL || param.m_svr_infos.size() == 0 || param.m_send_cmd_type_to_cgi_info_map.size() == 0 
 		|| param.m_unpacker == NULL || param.m_callback == nullptr)
 	{
-		slog_e("fail to ClientNetwork::init, param is error");
+		slog_e("ClientNetwork::init fail, param is error");
 		return false;
 	}
 	m_init_param = param;
@@ -43,7 +45,10 @@ bool ClientNetwork::init(const InitParam& param)
 bool ClientNetwork::start()
 {
 	if (m_is_running)
+	{
+		slog_d("ClientNetwork::start already start, ignore.");
 		return true;
+	}
 	m_is_running = true;
 	slog_d("network start");
 
@@ -53,7 +58,7 @@ bool ClientNetwork::start()
 	{
 		if (m_speed_tester != NULL)
 		{
-			slog_e("fail, m_speed_tester != NULL");
+			slog_e("ClientNetwork::start fail, m_speed_tester != NULL");
 			return false;
 		}
 		m_speed_tester = new ClientNetSpeedTester();
@@ -74,27 +79,24 @@ bool ClientNetwork::start()
 		p.m_svr_infos = svr_infos;
 		if (!m_speed_tester->init(p))
 		{
-			slog_e("fail to m_speed_tester->init");
+			slog_e("ClientNetwork::start fail to m_speed_tester->init");
 			return false;
 		}
 
 		if (!__doTestSvrSpeed())
 		{
-			slog_e("fail to __doTestSvrSpeed");
+			slog_e("ClientNetwork::start fail to __doTestSvrSpeed");
 			return false;
 		}
 	}
 	
 	if (!m_init_param.m_work_looper->startTimer(m_timer_id, 1, 1))
 	{
-		slog_e("fail to startTimer");
+		slog_e("ClientNetwork::start fail to startTimer");
 		return false;
 	}
 	
 	m_init_param.m_callback->onClientNetworkStatred(this);
-	//Message* msg = new Message();
-	//msg->m_msg_type = EMsgType_networkStarted;
-	//__postMsgToTarget(msg);
 	return true;
 }
 
@@ -122,15 +124,22 @@ void ClientNetwork::stop()
 	delete_and_erase_collection_elements(&m_wait_resp_pack_infos);
 
 	m_init_param.m_callback->onClientNetworkStopped(this);
+	slog_d("network stop end");
 }
 
 ClientNetwork::SendPack* ClientNetwork::newSendPack(uint64_t send_pack_id, uint32_t send_cmd_type, uint32_t send_seq)
 {
 	ClientCgiInfo* cgi_info = __getClientCgiInfoBySendCmdType(send_cmd_type);
 	if (cgi_info == nullptr)
+	{
+		slog_e("ClientNetwork::newSendPack fail to __getClientCgiInfoBySendCmdType, send_cmd_type=%0", send_cmd_type);
 		return nullptr;
+	}
 	if (cgi_info->m_cgi_type == EClientCgiType_c2sNotify && send_seq != 0)
+	{
+		slog_e("ClientNetwork::newSendPack fail, m_cgi_type == EClientCgiType_c2sNotify && send_seq != 0. send_cmd_type=%0", send_cmd_type);
 		return nullptr;
+	}
 
 	SendPack* send_pack = new ClientNetwork::SendPack;
 	send_pack->m_send_pack_id = send_pack_id;
@@ -143,32 +152,33 @@ bool ClientNetwork::sendPack(const SendPack& send_pack)
 {
 	if (!m_is_running)
 	{
-		slog_e("fail to sendPack, !m_is_running! %0", send_pack.toOverviewString());
+		slog_e("ClientNetwork::sendPack fail, !m_is_running! %0", send_pack.toOverviewString());
 		return false;
 	}
 	if (send_pack.m_send_whole_pack_bin.getLen() == 0)
 	{
-		slog_e("fail to sendPack, len == 0! %0", send_pack.toOverviewString());
+		slog_e("ClientNetwork::sendPack fail, len == 0! %0", send_pack.toOverviewString());
 		return false;
 	}
+
 	ClientCgiInfo* cgi_info = __getClientCgiInfoBySendCmdType(send_pack.m_send_cmd_type);
 	if (cgi_info == nullptr)
 	{
-		slog_e("fail to sendPack, cgi_info == nullptr! %0", send_pack.toOverviewString());
+		slog_e("ClientNetwork::sendPack fail, cgi_info == nullptr! %0", send_pack.toOverviewString());
 		return false;
 	}
 	if ((cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0)
 		|| (cgi_info->m_cgi_type == EClientCgiType_c2sNotify && send_pack.m_send_seq != 0)
 		|| (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0))
 	{
-		slog_e("fail to sendPack, invalid send_seq! %0", send_pack.toOverviewString());
+		slog_e("ClientNetwork::sendPack fail, invalid send_seq! %0", send_pack.toOverviewString());
 		return false;
 	}
 
 	size_t pack_count = __getSendPackCountBySendPackCmdType(send_pack.m_send_cmd_type);
 	if (pack_count >= cgi_info->m_max_pack_count_in_queue)
 	{
-		slog_e("fail to sendPack, too many send pack in queue in network! %0", send_pack.toOverviewString());
+		slog_e("ClientNetwork::sendPack fail, too many send pack in queue in network! %0", send_pack.toOverviewString());
 		return false;
 	}
 
@@ -199,8 +209,7 @@ void ClientNetwork::cancelSendPack(uint64_t pack_id)
 		}
 		else // not sending
 		{
-			delete m_send_pack_infos[index];
-			m_send_pack_infos.erase(m_send_pack_infos.begin() + index);
+			delete_and_erase_vector_element_by_index(&m_send_pack_infos, index);
 		}
 
 		return;
@@ -210,8 +219,7 @@ void ClientNetwork::cancelSendPack(uint64_t pack_id)
 	if (index >= 0) // in wait resp queue
 	{
 		slog_d("cancelSendPack");
-		delete m_wait_resp_pack_infos[index];
-		m_wait_resp_pack_infos.erase(m_wait_resp_pack_infos.begin() + index);
+		delete_and_erase_vector_element_by_index(&m_wait_resp_pack_infos, index);
 	}
 }
 
@@ -299,11 +307,7 @@ void ClientNetwork::__onMsgTcpSocketClientConnected(ITcpSocketCallbackApi::Clien
 
 	{
 		m_init_param.m_callback->onClientNetworkConnectStateChanged(this, EConnectState_connected);
-		//NetworkConnectStateChangedMsg* m = new NetworkConnectStateChangedMsg();
-		//m->m_connect_state = EConnectState_connected;
-		//__postMsgToTarget(m);
 	}
-	//m_init_param.m_unpacker->resetRecvRawData();
 	__doSendPack();
 }
 
@@ -313,14 +317,10 @@ void ClientNetwork::__onMsgTcpSocketClientDisconnected(ITcpSocketCallbackApi::Cl
 	m_client_ctx.resetConnectState();
 	{
 		m_init_param.m_callback->onClientNetworkConnectStateChanged(this, EConnectState_disconnected);
-		//NetworkConnectStateChangedMsg* m = new NetworkConnectStateChangedMsg();
-		//m->m_connect_state = EConnectState_disconnected;
-		//__postMsgToTarget(m);
 	}
 
 	m_send_pack_infos.insert(m_send_pack_infos.begin(), m_wait_resp_pack_infos.begin(), m_wait_resp_pack_infos.end());
 	m_wait_resp_pack_infos.clear();
-	//m_send_seq_seed = 0;
 
 	if (!__doConnectTcpSvr())
 	{
@@ -343,11 +343,6 @@ void ClientNetwork::__onMsgTcpSocketClientSendDataEnd(ITcpSocketCallbackApi::Cli
 		}
 		else // notify or resp pack : already done, notify message
 		{
-	/*		SendPackEndMsg* m = new SendPackEndMsg();
-			m->m_err_type = EErrType_ok;
-			m->m_err_code = 0;
-			m->m_send_pack_id = sending_pack->m_pack.m_send_pack_id;
-			__postMsgToTarget(m);*/
 			m_init_param.m_callback->onClientNetworkSendPackEnd(this, EErrType_ok, 0, sending_pack->m_pack.m_send_pack_id, NULL);
 
 			delete_and_erase_vector_element_by_index(&m_send_pack_infos, sending_pack_index);
@@ -464,8 +459,8 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 
 	m_speed_tester->stop();
 
-	m_connect_count = 0;
 	// init client and connect
+	m_connect_count = 0;
 	ITcpSocketCallbackApi::CreateClientSocketParam param;
 	param.m_callback_looper = m_init_param.m_work_looper;
 	param.m_callback_target = this;
@@ -556,10 +551,6 @@ bool ClientNetwork::__doConnectTcpSvr()
 		return false;
 	}
 	m_client_ctx.m_connect_state = __EConnectState_connecting;
-	//Message* msg = new Message();
-	//msg->m_msg_type = EMsgType_networkConnectStateChanged;
-	//msg->m_args.setUint32("connect_state", EConnectState_connecting);
-	//__postMsgToTarget(msg);
 	m_init_param.m_callback->onClientNetworkConnectStateChanged(this, EConnectState_connecting);
 	return true;
 }

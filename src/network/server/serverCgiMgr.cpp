@@ -25,7 +25,7 @@ bool ServerCgiMgr::init(const InitParam& param)
 	slog_d("init ServerCgiMgr");
 	if (param.m_network == NULL || param.m_work_looper == NULL || param.m_callback == nullptr)
 	{
-		slog_e("fail to init, param error!");
+		slog_e("ServerCgiMgr::init fail, param error!");
 		return false;
 	}
 
@@ -36,7 +36,7 @@ bool ServerCgiMgr::init(const InitParam& param)
 	m_timer_id = m_init_param.m_work_looper->createTimer(this);
 	if (m_timer_id == 0 || !m_init_param.m_work_looper->startTimer(m_timer_id, 1, 1))
 	{
-		slog_i("fail to start timer");
+		slog_i("ServerCgiMgr::init fail to start timer");
 		return false;
 	}
 
@@ -48,25 +48,25 @@ bool ServerCgiMgr::startCgi(ServerCgi * cgi)
 	slog_v("startCgi cgi=%0, ssid=%1", (uint64_t)cgi,  cgi->getSessionId().toString());
 	if (cgi == NULL || cgi->getCallback() == NULL || cgi->getSendPack() == NULL)
 	{
-		slog_e("cgi param err");
+		slog_e("ServerCgiMgr::startCgi fail, cgi param err");
 		return false;
 	}
 	int index = __getCgiInfoIndexSendCmdType(cgi->getSendPack()->m_send_cmd_type);
 	if (index < 0)
 	{
-		slog_e("fail to find cgi info");
+		slog_e("ServerCgiMgr::startCgi fail to find cgi info");
 		return false;
 	}
 	__SessionCtx* ctx = get_map_element_by_key(m_session_ctx_map, cgi->getSessionId());
 	if (ctx == NULL)
 	{
-		slog_e("fail to find session");
+		slog_e("ServerCgiMgr::startCgi fail to find session");
 		return false;
 	}
 
 	if (!m_init_param.m_network->sendPackToClient(*cgi->getSendPack()))
 	{
-		slog_e("fail to send pack to client");
+		slog_e("ServerCgiMgr::startCgi fail to send pack to client");
 		return false;
 	}
 	cgi->setStartMs(TimeUtil::getMsTime());
@@ -85,9 +85,10 @@ void ServerCgiMgr::stopCgi(ServerCgi * cgi)
 	__SessionCtx* ctx = get_map_element_by_key(m_session_ctx_map, cgi->getSessionId());
 	if (ctx == NULL)
 	{
-		slog_w("fail to find session, maybe session is closed");
+		slog_d("ServerCgiMgr::stopCgi fail to find session, maybe closed? ignore.");
 		return;
 	}
+
 	m_init_param.m_network->cancelSendPackToClient(ctx->m_sid, cgi->getSendPack()->m_send_pack_id);
 	erase_vector_element_by_index(&m_cgis, index);
 }
@@ -269,16 +270,3 @@ ServerCgiMgr::__SessionCtx* ServerCgiMgr::__createSession(session_id_t ssid, soc
 
 
 SSVR_NAMESPACE_END
-
-//int index = __getCgiInfoIndexSendCmdType(m->m_send_pack.m_send_cmd_type);
-//if (index < 0)
-//	return;
-//ServerCgiInfo& cgi_info = m_init_param.m_cgi_infos[index];
-
-//if (cgi_info.m_cgi_type == EServerCgiType_c2sReq_s2cResp || cgi_info.m_cgi_type == EServerCgiType_s2cPush)
-//{
-//}
-//else
-//{
-//	slog_e("err path");
-//}

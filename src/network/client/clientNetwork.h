@@ -243,11 +243,8 @@ private:
 	};
 
 
-	// IMessageHandler
-	virtual void onMessage(Message * msg, bool* isHandled);
-
-	// IMessageTimerHandler
-	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data);
+	virtual void onMessage(Message * msg, bool* isHandled) override;
+	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override;
 
 	void __onMsgSendPack(Message* msg);
 	void __onMsgNetworkStatusChanged(Message* msg);
@@ -291,6 +288,7 @@ private:
 	InitParam m_init_param;
 	bool m_is_running;
 	uint64_t m_timer_id;
+
 	std::vector<int32_t> m_connect_interval_mss;
 	bool m_is_repeat_last_connect_interval_ms;
 	uint64_t m_last_reconnect_time_ms;
@@ -301,8 +299,6 @@ private:
 	bool m_is_testing_speed;
 
 	__ClientCtx m_client_ctx;
-	//uint64_t m_send_pack_id_seed;
-	//uint32_t m_send_seq_seed;
 	std::vector<__SendPackInfo*> m_send_pack_infos;
 	std::vector<__WaitRespPackInfo*> m_wait_resp_pack_infos;
 };

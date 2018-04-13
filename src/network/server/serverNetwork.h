@@ -5,28 +5,6 @@ SSVR_NAMESPACE_BEGIN
 
 
 
-class session_id_t
-{
-public:
-	session_id_t() { memset(m_data, 0, 16); }
-
-	std::string toString() const
-	{
-		return StringUtil::toString(m_data, 16);
-	}
-
-	byte_t m_data[16];
-};
-
-
-bool operator < (const session_id_t& l, const session_id_t& r);
-bool operator == (const session_id_t& l, const session_id_t& r);
-bool operator != (const session_id_t& l, const session_id_t& r);
-
-
-
-
-
 
 /*
 server network.
@@ -157,7 +135,7 @@ public:
 	bool start();
 	void stop();
 
-	SendPack* newSendPack(socket_id_t sid, session_id_t ssid, uint32_t send_cmd_type, uint32_t send_seq = -1); // if send_seq == -1, network will generate send_seq
+	SendPack* newSendPack(socket_id_t sid, session_id_t ssid, uint32_t send_cmd_type, uint32_t send_seq);
 	bool sendPackToClient(const SendPack& send_pack);
 	void cancelSendPackToClient(socket_id_t client_sid, uint64_t send_pack_id);
 	void disconnectClient(socket_id_t client_sid);
@@ -188,7 +166,7 @@ private:
 	class __Client
 	{
 	public:
-		__Client() { m_sid = 0; m_sending_index = -1; m_send_seq_seed = 0; }
+		__Client() { m_sid = 0; m_sending_index = -1; }
 		int getSpiIndexBySendPackId(uint64_t send_pack_id);
 		int getSpiIndexBySeq(uint32_t seq);
 
@@ -196,7 +174,6 @@ private:
 		std::vector<__SendPackInfo*> m_send_pack_infos;
 		int m_sending_index;
 		Binary m_recv_data;
-		uint32_t m_send_seq_seed;
 	};
 
 	typedef std::map<socket_id_t, __Client*> SidToClientMap;
@@ -232,7 +209,6 @@ private:
 
 
 	static uint64_t s_send_pack_id_seed;
-	//Mutex m_mutex;
 	InitParam m_init_param;
 	SidToClientMap m_sid_to_client_map;
 	bool m_is_running;

@@ -8,16 +8,12 @@
 
 
 #ifndef SSVR_NAMESPACE_BEGIN
-#define SSVR_NAMESPACE_BEGIN namespace S{
-#define SSVR_NAMESPACE_END }
-#define USING_NAMESPACE_SSVR using namespace S;
-//#define SSVR_NAMESPACE_BEGIN namespace S{ namespace svr {
-//#define SSVR_NAMESPACE_END }}
-//#define USING_NAMESPACE_SSVR using namespace S::svr;
+	#define SSVR_NAMESPACE_BEGIN namespace S{
+	#define SSVR_NAMESPACE_END }
+	#define USING_NAMESPACE_SSVR using namespace S;
 #endif
 
-#define ServerSessionManager_MSG_BEGIN 815657
-#define SESSION_HANDLER_MSG_BEGIN 886261
+SSVR_NAMESPACE_BEGIN
 
 
 
@@ -81,6 +77,23 @@ public:
 };
 
 
+class session_id_t
+{
+public:
+	session_id_t() { memset(m_data, 0, 16); }
+	std::string toString() const;
+	byte_t m_data[16];
+};
 
 
+bool operator < (const session_id_t& l, const session_id_t& r);
+bool operator == (const session_id_t& l, const session_id_t& r);
+bool operator != (const session_id_t& l, const session_id_t& r);
+
+
+
+
+
+
+SSVR_NAMESPACE_END
 #endif

@@ -12,7 +12,6 @@ ClientCgiMgr::~ClientCgiMgr()
 {
 	slog_d("delete ClientCgiMgr=%0", (uint64_t)this);
 	delete_and_erase_collection_elements(&m_cgis);
-	//m_init_param.m_work_looper->removeMsgHandler(this);
 }
 
 bool ClientCgiMgr::init(const InitParam & param)
@@ -20,12 +19,11 @@ bool ClientCgiMgr::init(const InitParam & param)
 	slog_d("init ClientCgiMgr");
 	if (param.m_network == NULL || param.m_cgi_infos.size() == 0 || param.m_callback == NULL)
 	{
-		slog_e("param err");
+		slog_e("ClientCgiMgr::init fail, param err");
 		return false;
 	}
 
 	m_init_param = param;
-	//m_init_param.m_work_looper->addMsgHandler(this);
 	return true;
 }
 
@@ -34,17 +32,20 @@ bool ClientCgiMgr::startCgi(ClientCgi* cgi)
 	slog_v("start cgi, cgi=%0", (uint64_t)cgi);
 	if (cgi == NULL || cgi->getCallback() == NULL || cgi->getSendPack() == NULL)
 	{
-		slog_e("cgi param err");
+		slog_e("ClientCgiMgr::startCgi fail, cgi param err");
 		return false;
 	}
 
 	int index = get_vector_index_by_element(m_cgis, cgi);
 	if (index >= 0)
+	{
+		slog_d("ClientCgiMgr::startCgi cgi already start? ignore");
 		return true;
+	}
 
 	if (!m_init_param.m_network->sendPack(*cgi->getSendPack()))
 	{
-		slog_e("fail to send pack");
+		slog_e("ClientCgiMgr::startCgi fail to send pack");
 		return false;
 	}
 
@@ -89,7 +90,7 @@ void ClientCgiMgr::onClientNetworkSendPackEnd(ClientNetwork * network, ClientNet
 	int cgi_index = __getCgiIndexBySendPackId(send_pack_id);
 	if (cgi_index < 0)
 	{
-		slog_e("fail to find cgi index, send_pack_id=%0", send_pack_id);
+		slog_e("onClientNetworkSendPackEnd fail to find cgi index, send_pack_id=%0", send_pack_id);
 		return;
 	}
 
@@ -113,9 +114,10 @@ void ClientCgiMgr::onClientNetworkSendPackEnd(ClientNetwork * network, ClientNet
 	}
 	else
 	{
-		slog_e("invalid path");
+		slog_e("onClientNetworkSendPackEnd invalid path");
 	}
 	cgi->setEndMs(TimeUtil::getMsTime());
+
 	slog_v("call back cgi=%0", (uint64_t)cgi);
 	m_cgis.erase(m_cgis.begin() + cgi_index);
 	cgi->getCallback()->onClientCgi_cgiDone(cgi);
@@ -127,7 +129,7 @@ void ClientCgiMgr::onClientNetworkRecvPack(ClientNetwork * network, std::unique_
 	int cgi_info_index = __getCgiInfoIndexByRecvPackCmdType(p->m_recv_cmd_type);
 	if (cgi_info_index < 0)
 	{
-		slog_e("recv unkonw pack, recv_cmd_type=%0", p->m_recv_cmd_type);
+		slog_e("onClientNetworkSendPackEnd recv unkonw pack, recv_cmd_type=%0", p->m_recv_cmd_type);
 		return;
 	}
 	
@@ -142,7 +144,7 @@ void ClientCgiMgr::onClientNetworkRecvPack(ClientNetwork * network, std::unique_
 	}
 	else
 	{
-		slog_e("invalid path");
+		slog_e("onClientNetworkSendPackEnd invalid path");
 	}
 }
 
@@ -152,6 +154,17 @@ int ClientCgiMgr::__getCgiIndexBySendPackId(uint64_t send_pack_id)
 	for (size_t i = 0; i < m_cgis.size(); ++i)
 	{
 		if (send_pack_id == m_cgis[i]->getSendPack()->m_send_pack_id)
+			return (int)i;
+	}
+	return -1;
+}
+
+int ClientCgiMgr::__getCgiInfoIndexByRecvPackCmdType(uint32_t recv_pack_cmd_type)
+{
+	for (size_t i = 0; i < m_init_param.m_cgi_infos.size(); ++i)
+	{
+		ClientCgiInfo& info = m_init_param.m_cgi_infos[i];
+		if (info.m_recv_cmd_type == recv_pack_cmd_type)
 			return (int)i;
 	}
 	return -1;
