@@ -28,7 +28,7 @@ public:
 
 
 unpackClientRecvPack/unpackServerRecvPack:
-	if the magic_num in raw data is not equal to SimpleTcpPacker.m_magic_num, fun will return EUnpackResultType_fail. app_id, ver are the same.
+	if magic_num|app_id|ver which is unpacked from raw data are not equal to SimpleTcpPacker.m_magic_num|m_app_id|m_ver, fun will return EUnpackResultType_fail.
 */
 
 class SimpleTcpPacker : public ClientNetwork::IUnpacker, public ServerNetwork::IUnpacker
@@ -97,8 +97,3 @@ typedef SimpleTcpPacker StPacker;
 
 S_NAMESPACE_END
 #endif
-
-
-//bool packClientSendPack(ClientNetwork::SendPack* send_pack, const byte_t* send_pack_body, size_t send_pack_body_len);
-//bool packServerSendPack(ServerNetwork::SendPack* send_pack, const byte_t* send_pack_body, size_t send_pack_body_len);
-

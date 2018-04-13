@@ -59,8 +59,7 @@ public:
 		session_id_t m_ssid;
 		uint32_t m_send_cmd_type;
 		uint32_t m_send_seq;
-		Binary m_send_whole_pack_bin; // include pack head and body
-		//uint32_t m_expect_resp_seq;
+		Binary m_send_whole_pack_bin; // raw data which include pack head and body. it wll be sent to socket.
 	};
 
 	class IRecvPackExt
@@ -179,10 +178,8 @@ private:
 	typedef std::map<socket_id_t, __Client*> SidToClientMap;
 
 
-	// IMessageHandler
-	virtual void onMessage(Message * msg, bool* isHandled);
-	// IMessageTimerHandler
-	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data);
+	virtual void onMessage(Message * msg, bool* isHandled) override;
+	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override;
 
 	void __onSvrStartedMsg(ITcpSocketCallbackApi::SvrListenSocketStartedMsg* msg);
 	void __onSvrStoppedMsg(ITcpSocketCallbackApi::SvrListenSocketStoppedMsg* msg);
