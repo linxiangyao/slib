@@ -325,7 +325,7 @@ private:
 void __testClientNetwork()
 {
 	printf("\n__testClientNetwork ---------------------------------------------------------\n");
-	__initLog(ELogLevel_info);
+	__initLog(ELogLevel_debug);
 	ConsoleApp* app = new ConsoleApp();
 	__ClientNetworkLogic* logic = new __ClientNetworkLogic();
 	app->run(logic);

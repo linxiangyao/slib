@@ -29,8 +29,11 @@ void releaseSocketLib()
 static bool __bindAndListen(SOCKET svr_socket, const std::string& svrIpOrName, int svrPort)
 {
     uint32_t svrIp = 0;
-    if (!SocketUtil::getIpByName(svrIpOrName.c_str(), &svrIp))
-        return false;
+	if (!SocketUtil::getIpByName(svrIpOrName.c_str(), &svrIp))
+	{
+		slog_e("__bindAndListen fail to getIpByName!");
+		return false;
+	}
 
     struct sockaddr_in serverAddress;
     SocketUtil::initAddr(&serverAddress, svrIp, svrPort);
@@ -38,19 +41,19 @@ static bool __bindAndListen(SOCKET svr_socket, const std::string& svrIpOrName, i
     int enable = 1;
     if (setsockopt(svr_socket, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable)) != 0)
     {
-        slog_e("tcpSocketBindAndListen setsockopt SO_REUSEADDR !");
+        slog_e("__bindAndListen fail to setsockopt SO_REUSEADDR!");
         return false;
     }
 
     if (bind(svr_socket, (LPSOCKADDR)&serverAddress, sizeof(sockaddr_in)) == SOCKET_ERROR)
     {
-		slog_e("tcpSocketBindAndListen bind fail, error code : %d", WSAGetLastError());
+		slog_e("__bindAndListen fail to bind, error code : %d", WSAGetLastError());
         return false;
     }
 
     if (listen(svr_socket, 5) == SOCKET_ERROR)
     {
-		slog_e("tcpSocketBindAndListen listen fail, error code : %d", WSAGetLastError());
+		slog_e("__bindAndListen fail to listen, error code : %d", WSAGetLastError());
         return false;
     }
 
@@ -72,7 +75,7 @@ static bool __accept(SOCKET svrSocket, SOCKET* svrTransSocket)
     *svrTransSocket = accept(svrSocket, (struct sockaddr*)&from_addr, &addr_len);
     if (*svrTransSocket == INVALID_SOCKET)
     {
-        //slog_e("tcpSocketAccept accept fail, error code : %d", WSAGetLastError());
+        slog_e("__accept fail to accept, error code : %d", WSAGetLastError());
         return false;
     }
     char* from_ip_str = inet_ntoa(from_addr.sin_addr);
@@ -85,8 +88,12 @@ static bool __accept(SOCKET svrSocket, SOCKET* svrTransSocket)
 static bool __changeSocketToAsync(SOCKET s)
 {
     DWORD ul = 1;
-    if (0 != ioctlsocket(s, FIONBIO, &ul))
-        return false;
+	if (0 != ioctlsocket(s, FIONBIO, &ul))
+	{
+		slog_e("__changeSocketToAsync fail to ioctlsocket");
+		return false;
+	}
+        
     return true;
 }
 
@@ -105,19 +112,23 @@ void SocketUtil::initAddr(struct sockaddr_in* addr, uint32_t ip, int port)
 	addr->sin_port = htons((short)port);
 }
 
-bool SocketUtil::connect(SOCKET client_socket, const std::string& svrIpOrName, int svrPort)
+bool SocketUtil::connect(SOCKET client_socket, const std::string& svr_ip_or_name, int svr_port)
 {
-	uint32_t svrIp = 0;
-	if (!SocketUtil::getIpByName(svrIpOrName.c_str(), &svrIp))
+	uint32_t svr_ip = 0;
+	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &svr_ip))
+	{
+		slog_e("connect fail to getIpByName!");
 		return false;
+	}
 
 	struct sockaddr_in serverAddress;
-	SocketUtil::initAddr(&serverAddress, svrIp, svrPort);
+	SocketUtil::initAddr(&serverAddress, svr_ip, svr_port);
 
 	if (::connect(client_socket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR)
 	{
 		if (WSAGetLastError() == WSAEWOULDBLOCK)
 			return true;
+		slog_e("connect fail to connect, ip=%s, port=%d!\n", svr_ip_or_name.c_str(), svr_port);
 		return false;
 	}
 	return true;
@@ -569,7 +580,7 @@ bool TcpSocketCallbackApi::init(MessageLooper * work_looper)
 	ScopeMutex __l(m_mutex);
 	if (m_work_looper != nullptr)
 	{
-		slog_w("m_work_looper != nullptr");
+		slog_w("init m_work_looper != nullptr, maybe already init? igonre.");
 		return true;
 	}
 
@@ -579,7 +590,8 @@ bool TcpSocketCallbackApi::init(MessageLooper * work_looper)
 		m_work_looper = m_work_thread->getLooper();
 		if (!m_work_thread->start())
 		{
-			slog_e("fail to start work_thread");
+			slog_e("init fail to start work_thread");
+			DELETE_AND_NULL(m_work_thread);
 			return false;
 		}
 	}
@@ -602,13 +614,17 @@ bool TcpSocketCallbackApi::createClientSocket(socket_id_t* client_sid, const Cre
 
 	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip_or_name.size() == 0 || param.m_svr_port == 0)
 	{
-		slog_e("fail to createClientSocket, param error");
+		slog_e("createClientSocket fail, param error");
 		return false;
 	}
 
     ScopeMutex __l(m_mutex);
 	if (m_work_looper == NULL) // no init
+	{
+		slog_e("createClientSocket fail, m_work_looper == NULL");
 		return false;
+	}
+		
     __SocketCtx* ctx = new __SocketCtx();
     ctx->m_sid = ++m_sid_seed;
     ctx->m_socket_type = ETcpSocketType_client;
@@ -634,19 +650,30 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
 	slog_d("startClientSocket cient_sid=%0", client_sid);
 	__SocketCtx* ctx = __getClientCtxById(client_sid);
 	if (ctx == NULL)
+	{
+		slog_e("startClientSocket fail to find ctx, cient_sid=%0", client_sid);
 		return false;
+	}
 	if (ctx->m_socket != INVALID_SOCKET)
+	{
+		slog_d("startClientSocket ctx->m_socket != INVALID_SOCKET, already start? ignore, cient_sid=%0", client_sid);
 		return true;
+	}
 
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET)
-        return false;
+	if (s == INVALID_SOCKET)
+	{
+		slog_e("startClientSocket fail to create socket, cient_sid=%0", client_sid);
+		return false;
+	}
+        
 	ctx->m_socket = s;
 
     __ClientRun* r = new __ClientRun(this, m_work_looper, ctx->m_sid, ctx->m_socket, ctx->m_client_param.m_svr_ip_or_name, ctx->m_client_param.m_svr_port);
     Thread* t = new Thread(r);
 	if (!t->start())
 	{
+		slog_e("startClientSocket fail start thread, cient_sid=%0", client_sid);
 		t->stopAndJoin();
 		delete r;
 		delete t;
@@ -672,16 +699,26 @@ bool TcpSocketCallbackApi::sendDataFromClientSocketToSvr(socket_id_t client_sid,
 	slog_v("send data to svr client_sid=%0", client_sid);
 	__SocketCtx* ctx = __getClientCtxById(client_sid);
 	if (ctx == NULL)
+	{
+		slog_w("sendDataFromClientSocketToSvr fail to find ctx, maybe closed? ignore, client_sid=%0", client_sid);
 		return false;
+	}
 
     Thread* t = __getThreadById(client_sid);
     if (t == NULL)
-        return false;
+	{
+		slog_e("sendDataFromClientSocketToSvr fail to get thread, client_sid=%0", client_sid);
+		return false;
+	}
+
     if (ctx->m_socket_type == ETcpSocketType_client)
     {
         __ClientRun* r = (__ClientRun*)t->getRun();
         if (!r->startSend(data, data_len))
-            return false;
+		{
+			slog_e("sendDataFromClientSocketToSvr fail to __ClientRun->startSend, client_sid=%0", client_sid);
+			return false;
+		}
     }
     return true;
 }
@@ -711,10 +748,20 @@ bool TcpSocketCallbackApi::createSvrListenSocket(socket_id_t* svr_listen_sid, co
     if (svr_listen_sid == NULL)
         return false;
     *svr_listen_sid = 0;
-	    
+
+	if (param.m_callback_looper == nullptr || param.m_svr_ip_or_name.size() == 0 || param.m_svr_port == 0)
+	{
+		slog_e("createSvrListenSocket fail, param err");
+		return false;
+	}
+
     ScopeMutex __l(m_mutex);
 	if (m_work_looper == NULL) // no init
+	{
+		slog_e("createSvrListenSocket fail, m_work_looper == NULL");
 		return false;
+	}
+
     __SocketCtx* ctx = new __SocketCtx();
     ctx->m_sid = ++m_sid_seed;
     ctx->m_socket_type = ETcpSocketType_svr_listen;
@@ -739,19 +786,29 @@ bool TcpSocketCallbackApi::startSvrListenSocket(socket_id_t svr_listen_sid)
 	slog_d("startSvrListenSocket svr_listen_sid=%0", svr_listen_sid);
 	__SocketCtx* ctx = __getSvrListenCtxById(svr_listen_sid);
 	if (ctx == NULL)
+	{
+		slog_e("startSvrListenSocket fail, ctx == NULL, svr_listen_sid=%0", svr_listen_sid);
 		return false;
+	}
 	if (ctx->m_socket != INVALID_SOCKET)
+	{
+		slog_d("startSvrListenSocket ctx->m_socket != INVALID_SOCKET, already start? ignore. svr_listen_sid=%0", svr_listen_sid);
 		return true;
+	}
 
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s == INVALID_SOCKET)
+	{
+		slog_e("startSvrListenSocket fail to create socket, svr_listen_sid=%0", svr_listen_sid);
 		return false;
+	}
 	ctx->m_socket = s;
 
 	__SvrListenRun* r = new __SvrListenRun(m_work_looper, this, ctx->m_socket, ctx->m_sid, ctx->m_svr_param.m_svr_ip_or_name, ctx->m_svr_param.m_svr_port);
 	Thread* t = new Thread(r);
 	if (!t->start())
 	{
+		slog_e("startSvrListenSocket fail to start thread, svr_listen_sid=%0", svr_listen_sid);
 		t->stopAndJoin();
 		delete r;
 		delete t;
@@ -783,16 +840,27 @@ bool TcpSocketCallbackApi::sendDataFromSvrTranSocketToClient(socket_id_t svr_tra
 {
     ScopeMutex __l(m_mutex);
 	slog_v("send data to client svr_tran_sid=%0, len=%1", svr_tran_sid, data_len);
+
 	__SocketCtx* ctx = __getSvrTranCtxById(svr_tran_sid);
 	if (ctx == NULL)
+	{
+		slog_d("sendDataFromSvrTranSocketToClient fail, maybe closed? ignore, client svr_tran_sid=%0", svr_tran_sid);
 		return false;
+	}
 
     Thread* t = __getThreadById(svr_tran_sid);
     if (t == NULL)
-        return false;   
+	{
+		slog_e("sendDataFromSvrTranSocketToClient fail to find thread, client svr_tran_sid=%0", svr_tran_sid);
+		return false;
+	}
+
 	__SvrTransRun* r = (__SvrTransRun*)t->getRun();
 	if (!r->startSend(data, data_len))
+	{
+		slog_e("sendDataFromSvrTranSocketToClient fail to __SvrTransRun->startSend, client svr_tran_sid=%0", svr_tran_sid);
 		return false;
+	}
     return true;
 }
 
@@ -870,13 +938,14 @@ void TcpSocketCallbackApi::__onClientDisconnectedMsg(Message * msg)
 	ScopeMutex __l(m_mutex);
 	socket_id_t client_sid = msg->m_args.getUint64("client_sid");
 	__SocketCtx* ctx = __getClientCtxById(client_sid); 
-	if (ctx == NULL) // assert!
+	if (ctx == NULL)
 		return;
-	if (ctx->m_socket == INVALID_SOCKET) // assert!
+	if (ctx->m_socket == INVALID_SOCKET)
 		return;
 	ctx->m_socket = INVALID_SOCKET;
 
 	__releaseThread(client_sid);
+	// api can't release client ctx when it is closed.
 
 	ClientSocketDisconnectedMsg* m = new ClientSocketDisconnectedMsg();
 	m->m_client_sid = client_sid;
@@ -968,6 +1037,8 @@ void TcpSocketCallbackApi::__onSvrListenSocketClosedMsg(Message * msg)
 	__SocketCtx* ctx = __getSvrListenCtxById(svr_listen_sid);
 	if (ctx == NULL)
 		return;
+	// api can't release listen ctx when it is closed.
+
 	SvrListenSocketStoppedMsg* m = new SvrListenSocketStoppedMsg();
 	m->m_svr_listen_sid = svr_listen_sid;
 	slog_v("on svr listen socket closed msg ok, listen_sid=%0", svr_listen_sid);
@@ -1010,11 +1081,12 @@ void TcpSocketCallbackApi::__onSvrTransSocketClosedMsg(Message * msg)
 	__SocketCtx* ctx = __getSvrTranCtxById(svr_tran_sid);
 	if (ctx == NULL)
 		return;
+
 	SvrTranSocketStoppedMsg* m = new SvrTranSocketStoppedMsg();
 	m->m_svr_listen_sid = ctx->m_ref_listen_sid;
 	m->m_svr_trans_sid = ctx->m_sid;
 	__postMsgToTarget(m, ctx);
-	__releaseSvrTranSocket(svr_tran_sid);
+	__releaseSvrTranSocket(svr_tran_sid); // api release tran ctx when it is closed
 	slog_v("on svr tran socket closed msg ok, svr_tran_sid=%0", svr_tran_sid);
 }
 

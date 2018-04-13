@@ -89,7 +89,6 @@ public:
 		void* m_callback_target;
         std::string m_svr_ip_or_name;
         uint32_t m_svr_port;
-        TcpSocketThreadConfig m_thread_config;
     };
 
     class CreateSvrSocketParam
@@ -101,8 +100,6 @@ public:
 		void* m_callback_target;
         std::string m_svr_ip_or_name;
 		uint32_t m_svr_port;
-        TcpSocketThreadConfig m_accept_thread_config;
-        TcpSocketThreadConfig m_trans_thread_config;
     };
 
 	class ClientSocketConnectedMsg : public Message

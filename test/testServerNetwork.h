@@ -248,7 +248,7 @@ private:
 void __testServerNetwork()
 {
 	printf("\n__testServerNetwork ---------------------------------------------------------\n");
-	__initLog(ELogLevel_info);
+	__initLog(ELogLevel_debug);
 	ConsoleApp* app = new ConsoleApp();
 	__ServerNetworkLogic* logic = new __ServerNetworkLogic();
 	app->run(logic);
