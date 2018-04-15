@@ -57,7 +57,7 @@ bool ClientCgiMgr::startCgi(ClientCgi* cgi)
 
 void ClientCgiMgr::stopCgi(ClientCgi* cgi)
 {
-	slog_v("start cgi, cgi=%0", (uint64_t)cgi);
+	slog_v("stop cgi, cgi=%0", (uint64_t)cgi);
 	int index = get_vector_index_by_element(m_cgis, cgi);
 	if (index < 0)
 		return;
