@@ -75,10 +75,20 @@ public:
 		return ret == SQLITE_OK;
 	}
 
+	bool bindColumUint32(size_t colum_num, uint32_t v)
+	{
+		return bindColumInt32(colum_num, (int32_t)v);
+	}
+
 	bool bindColumInt64(size_t colum_num, int64_t v)
 	{
 		int ret = sqlite3_bind_int64(m_stmt, (int)colum_num + 1, v);
 		return ret == SQLITE_OK;
+	}
+
+	bool bindColumUint64(size_t colum_num, uint64_t v)
+	{
+		return bindColumInt64(colum_num, (int64_t)v);
 	}
 
 	bool bindColumText(size_t colum_num, const std::string& v)

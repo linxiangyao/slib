@@ -3,15 +3,19 @@
 #include "timeUtil.h"
 S_NAMESPACE_BEGIN
 
+
 #if defined(S_OS_WIN)
 uint64_t TimeUtil::getMsTime()
 {
+#define EPOCHFILETIME   (116444736000000000UL)
 	FILETIME ft;
 	GetSystemTimeAsFileTime(&ft);
-	
-	uint64_t t;
-	t = ((uint64_t)ft.dwHighDateTime) << 32 | ft.dwLowDateTime;
-	t = t / 10000;
+
+	LARGE_INTEGER li;
+	li.LowPart = ft.dwLowDateTime;
+	li.HighPart = ft.dwHighDateTime;
+
+	uint64_t t = (li.QuadPart - EPOCHFILETIME) / 10000;
 	return t;
 }
 
@@ -28,6 +32,7 @@ uint64_t TimeUtil::getTick()
 
 
 #else
+
 #include <sys/time.h>
 uint64_t TimeUtil::getMsTime()
 {
