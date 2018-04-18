@@ -13,7 +13,6 @@ class __ClientSendPackBuilder
 public:
 	__ClientSendPackBuilder()
 	{
-		m_callback = nullptr;
 		m_uin = 0;
 
 		memset(m_session_id_bin, 0, 16);
@@ -30,9 +29,9 @@ public:
 		m_send_cmd_type = 0;
 	}
 
-	ClientCgi::SendPack* newSendPackAndPack(const byte_t* send_body, size_t send_body_len) const
+	ClientNetwork::SendPack* newSendPackAndPack(const byte_t* send_body, size_t send_body_len) const
 	{
-		ClientCgi::SendPack* send_pack = m_network->newSendPack(m_send_pack_id, m_send_cmd_type, m_send_pack_seq);
+		ClientNetwork::SendPack* send_pack = m_network->newSendPack(m_send_pack_id, m_send_cmd_type, m_send_pack_seq);
 
 		Binary* whole_pack_bin = &(send_pack->m_send_whole_pack_bin);
 		StPacker::Pack p;
@@ -53,7 +52,6 @@ public:
 	StPacker* m_packer;
 	ClientNetwork* m_network;
 
-	ClientCgi::ICallback* m_callback;
 	uint64_t m_send_pack_id;
 	uint32_t m_send_pack_seq;
 	uint32_t m_send_cmd_type;
@@ -68,10 +66,8 @@ protected:
 	bool __initSendPack(__ClientSendPackBuilder& ctx, const std::string& body)
 	{
 		ctx.m_send_cmd_type = getCgiInfo().m_send_cmd_type;
-		ClientCgi::SendPack* send_pack = ctx.newSendPackAndPack((const byte_t*)body.c_str(), body.size() + 1);
+		ClientNetwork::SendPack* send_pack = ctx.newSendPackAndPack((const byte_t*)body.c_str(), body.size() + 1);
 		setSendPack(send_pack);
-
-		setCallback(ctx.m_callback);
 		return true;
 	}
 };
@@ -134,7 +130,7 @@ public:
 private:
 	virtual void onSetRecvPackEnd()
 	{
-		RecvPack* recv_pack = getRecvPack();
+		ClientNetwork::RecvPack* recv_pack = getRecvPack();
 		StPacker::Pack* st_pack = (StPacker::Pack*)recv_pack->m_recv_ext;
 		m_s2c_resp_body = (const char*)st_pack->m_body.getData();
 		m_s2c_resp_new_client_ver = StringUtil::fetchMiddle(m_s2c_resp_body, "new_client_ver=", ",");
@@ -210,7 +206,6 @@ private:
 
 		m_send_pack_builder.m_packer = m_packer;
 		m_send_pack_builder.m_network = getNetwork();
-		m_send_pack_builder.m_callback = this;
 
 		__startNotifyStatistic();
 		__startCheckVersion();
@@ -230,9 +225,10 @@ private:
 		printf("on timer\n");
 	}
 
-	virtual void onClientCgi_cgiDone(ClientCgi* cgi) override
+	virtual void onClientNetwork_cgiDone(ClientNetwork* network, ClientCgi* cgi) override
 	{
-		SimpleClientNetworkConsoleLogic::onClientCgi_cgiDone(cgi);
+		SimpleClientNetworkConsoleLogic::onClientNetwork_cgiDone(network, cgi);
+
 		if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sNotify && cgi->getCgiInfo().m_send_cmd_type == __ECgiCmdType_c2sNotify_notifyStatistic)
 		{
 			__ClientCgi_NotifyStatistic* c = (__ClientCgi_NotifyStatistic*)cgi;
@@ -282,7 +278,7 @@ private:
 		}
 		printf("client: send notify=%s\n", cgi->m_c2s_notify_body.c_str());
 
-		if (!getCgiMgr()->startCgi(cgi))
+		if (!getNetwork()->startCgi(cgi))
 		{
 			printf("client: fail to start notify_statstic_cgi\n");
 			return;
@@ -302,7 +298,7 @@ private:
 		}
 		printf("client: send req=%s\n", cgi->m_c2s_req_body.c_str());
 
-		if (!getCgiMgr()->startCgi(cgi))
+		if (!getNetwork()->startCgi(cgi))
 		{
 			printf("client: fail to start check_version_cgi\n");
 			return;
@@ -366,7 +362,9 @@ void __testStPacker()
 		printf("failt\n");
 	}
 }
-/*
-*/
+
+
+
+
 
 #endif

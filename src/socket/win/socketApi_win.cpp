@@ -128,7 +128,7 @@ bool SocketUtil::connect(SOCKET client_socket, const std::string& svr_ip_or_name
 	{
 		if (WSAGetLastError() == WSAEWOULDBLOCK)
 			return true;
-		slog_e("connect fail to connect, ip=%s, port=%d!\n", svr_ip_or_name.c_str(), svr_port);
+		slog_e("connect fail to connect, ip=%0, port=%1!", svr_ip_or_name.c_str(), svr_port);
 		return false;
 	}
 	return true;

@@ -14,8 +14,6 @@
 
 #include "socket/linux/socketApi_linux.cpp"
 
-#include "network/client/clientCgi.cpp"
-#include "network/client/clientCgiMgr.cpp"
 #include "network/client/clientNetSpeedTester.cpp"
 #include "network/client/clientNetwork.cpp"
 #include "network/client/rawClientNetwork.cpp"

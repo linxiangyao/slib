@@ -12,6 +12,7 @@ void __initLog(ELogLevel log_level)
 	Log::releaseInstance();
 	ConsoleAppender* ca = new ConsoleAppender();
 	FormatInfo formatInfo;
+	formatInfo.m_isShowFunction = false;
 	formatInfo.m_isShowFileName = false;
 	formatInfo.m_isShowLineNum = false;
 	Log::instance().setEnableLogLevel(log_level);
