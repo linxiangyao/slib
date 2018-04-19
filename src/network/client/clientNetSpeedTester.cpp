@@ -74,7 +74,7 @@ bool ClientNetSpeedTester::start()
 	if (m_is_running)
 		return true;
 	m_is_running = true;
-	slog_d("start");
+	slog_d("speed_test start");
 
 	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
 	{
@@ -94,7 +94,7 @@ bool ClientNetSpeedTester::start()
 void ClientNetSpeedTester::stop()
 {
 	ScopeMutex __l(m_mutex);
-	slog_d("stop");
+	slog_d("speed_test stop");
 	__stop();
 }
 
@@ -126,7 +126,7 @@ void ClientNetSpeedTester::__onMessage_clientConnected(const ITcpSocketCallbackA
 	int index = __getClientCtxIndexBySid(sid);
 	if (index < 0)
 		return;
-	slog_d("connected");
+	slog_d("speed_test connected");
 	__ClientCtx* ctx = m_client_ctx_vector[index];
 	ctx->m_connect_state = __EClientConncectState_connected;
 
@@ -146,7 +146,7 @@ void ClientNetSpeedTester::__onMessage_clientDisconnected(const ITcpSocketCallba
 	int index = __getClientCtxIndexBySid(sid);
 	if (index < 0)
 		return;
-	slog_d("disconnected");
+	slog_d("speed_test disconnected");
 	__ClientCtx* ctx = m_client_ctx_vector[index];
 	ctx->m_connect_state = __EClientConncectState_disconnected;
 
@@ -170,7 +170,7 @@ void ClientNetSpeedTester::__onMessage_clientDisconnected(const ITcpSocketCallba
 	}
 	if (is_done)
 	{
-		slog_d("done, stop");
+		slog_d("speed_test done, stop");
 		__stop();
 	}
 }
