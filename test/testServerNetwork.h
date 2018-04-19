@@ -20,9 +20,9 @@ public:
 		m_network = nullptr;
 	}
 
-	ServerCgi::SendPack* newSendPackAndPack(uint32_t send_cmd_type, uint32_t send_seq, const byte_t* send_body, size_t send_body_len) const
+	ServerNetwork::SendPack* newSendPackAndPack(uint32_t send_cmd_type, uint32_t send_seq, const byte_t* send_body, size_t send_body_len) const
 	{
-		ServerCgi::SendPack* send_pack = m_network->newSendPack(m_sid, m_ssid, send_cmd_type, send_seq);
+		ServerNetwork::SendPack* send_pack = m_network->newSendPack(m_sid, m_ssid, send_cmd_type, send_seq);
 
 		Binary* whole_pack_bin = &(send_pack->m_send_whole_pack_bin);
 		StPacker::Pack p;
@@ -43,7 +43,6 @@ public:
 	uint32_t m_uin;
 	StPacker* m_packer;
 	ServerNetwork* m_network;
-	ServerCgi::ICallback* m_callback;
 };
 
 
@@ -85,7 +84,6 @@ public:
 	__ServerCgi_s2cResp_checkVersion(const __ServerCgiCtx& cgi_ctx)
 	{
 		m_cgi_ctx = cgi_ctx;
-		setCallback(m_cgi_ctx.m_callback);
 	}
 
 	static const ServerCgiInfo & s_getServerCgiInfo()
@@ -105,7 +103,7 @@ public:
 			+ ", download_url=" + download_url
 			+ ", download_total_size=" + StringUtil::toString(download_total_size) 
 			+ ",";
-		SendPack* send_pack = m_cgi_ctx.newSendPackAndPack(getServerCgiInfo().m_send_cmd_type, getRecvPack()->m_recv_seq, (const byte_t*)m_s2c_resp_body.c_str(), m_s2c_resp_body.size() + 1);
+		ServerNetwork::SendPack* send_pack = m_cgi_ctx.newSendPackAndPack(getServerCgiInfo().m_send_cmd_type, getRecvPack()->m_recv_seq, (const byte_t*)m_s2c_resp_body.c_str(), m_s2c_resp_body.size() + 1);
 		setSendPack(send_pack);
 		return send_pack != nullptr;
 	}
@@ -162,20 +160,10 @@ public:
 	}
 
 private:
-	virtual void onServerCgiMgr_sessionCreated(socket_id_t sid, session_id_t ssid) override
+	virtual void onServerNetwork_recvC2sNotifyPack(ServerNetwork* network, unique_ptr<ServerNetwork::RecvPack>* recv_pack) override
 	{
-		printf("server: session created, sid=%" PRId64 ", ssid=%s\n", sid, ssid.toString().c_str());
-	}
-
-	virtual void onServerCgiMgr_sessionClosed(socket_id_t sid, session_id_t ssid) override
-	{
-		printf("server: session closed, sid=%" PRId64 ", ssid=%s\n", sid, ssid.toString().c_str());
-	}
-
-	virtual void onServerCgiMgr_recvC2sNotifyPack(std::unique_ptr<ServerCgi::RecvPack>* recv_pack) override
-	{
-		SimpleSvrNetworkConsoleLogic::onServerCgiMgr_recvC2sNotifyPack(recv_pack);
-		ServerCgi::RecvPack* p = recv_pack->get();
+		SimpleSvrNetworkConsoleLogic::onServerNetwork_recvC2sNotifyPack(network, recv_pack);
+		ServerNetwork::RecvPack* p = recv_pack->get();
 		StPacker::Pack* st_pack = (StPacker::Pack*)p->m_recv_ext;
 		if (p->m_recv_cmd_type == __ECgiCmdType_c2sNotify_notifyStatistic)
 		{
@@ -188,12 +176,11 @@ private:
 		}
 	}
 
-	virtual void onServerCgiMgr_recvC2sReqPack(std::unique_ptr<ServerCgi::RecvPack>* recv_pack) override
+	virtual void onServerNetwork_recvC2sReqPack(ServerNetwork* network, unique_ptr<ServerNetwork::RecvPack>* recv_pack) override
 	{
-		SimpleSvrNetworkConsoleLogic::onServerCgiMgr_recvC2sReqPack(recv_pack);
-		ServerCgi::RecvPack* p = recv_pack->get();
+		SimpleSvrNetworkConsoleLogic::onServerNetwork_recvC2sReqPack(network, recv_pack);
+		ServerNetwork::RecvPack* p = recv_pack->get();
 		__ServerCgiCtx cgi_ctx;
-		cgi_ctx.m_callback = this;
 		cgi_ctx.m_network = getNetwork();
 		cgi_ctx.m_packer = m_packer;
 		cgi_ctx.m_uin = 0;
@@ -207,7 +194,7 @@ private:
 			printf("server: recv req=%s\n", cgi->m_c2s_req_body.c_str());
 			cgi->initSendPack("2.1.1", true, "client_2.1.1", 3 * 1024 * 1024);
 			printf("server: send resp=%s\n", cgi->m_s2c_resp_body.c_str());
-			if (!getCgiMgr()->startCgi(cgi))
+			if (!getNetwork()->startCgi(cgi))
 			{
 				printf("server: fail to start cgi\n");
 			}
@@ -219,9 +206,9 @@ private:
 		}
 	}
 
-	virtual void onServerCgi_cgiDone(ServerCgi* cgi) override
+	virtual void onServerNetwork_cgiDone(ServerNetwork* network, ServerCgi* cgi) override
 	{
-		SimpleSvrNetworkConsoleLogic::onServerCgi_cgiDone(cgi);
+		SimpleSvrNetworkConsoleLogic::onServerNetwork_cgiDone(network, cgi);
 		if (cgi->getSendPack() != NULL && cgi->getSendPack()->m_send_cmd_type == __ECgiCmdType_s2cResp_checkVersion)
 		{
 			if (cgi->getIsCgiSuccess())

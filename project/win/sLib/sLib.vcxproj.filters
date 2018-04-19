@@ -112,14 +112,8 @@
     <ClInclude Include="..\..\..\src\network\server\simpleSvrNetworkConsoleApp.h">
       <Filter>network\server</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\network\server\serverCgi.h">
-      <Filter>network\server</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\console\consoleApp.h">
       <Filter>console</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\network\server\serverCgiMgr.h">
-      <Filter>network\server</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\3rd\data\xml\tinyxml2\tinyxml2.h">
       <Filter>3rd\data\xml\tinyxml2</Filter>
@@ -330,14 +324,8 @@
     <ClCompile Include="..\..\..\src\socket\linux\socketApi_linux.cpp">
       <Filter>socket\linux</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\network\server\serverCgi.cpp">
-      <Filter>network\server</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\console\consoleApp.cpp">
       <Filter>console</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\network\server\serverCgiMgr.cpp">
-      <Filter>network\server</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\3rd\data\xml\tinyxml2\tinyxml2.cpp">
       <Filter>3rd\data\xml\tinyxml2</Filter>
