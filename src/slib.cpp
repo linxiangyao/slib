@@ -9,7 +9,6 @@
 #include "thread/thread.cpp"
 #include "thread/messageLooper.cpp"
 #include "thread/messageLoopThread.cpp"
-#include "thread/messageLoopTimer.cpp"
 #include "console/consoleApp.cpp"
 
 #include "socket/linux/socketApi_linux.cpp"
