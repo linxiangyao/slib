@@ -71,9 +71,9 @@ private:
 		cout << "loop thread: onMessage, msgType=" << msg->m_msg_type << endl;
 		if (msg->m_msg_type == 2)
 		{
-			cout << "loop thread: create timer, circle ms = 1000" << endl;
-			m_timer_id = m_looper->createTimer(NULL);
-			m_looper->startTimer(m_timer_id, 1, 1 * 1000);
+			cout << "loop thread: create timer, delay_ms = 0, circle ms = 1000" << endl;
+			m_timer_id = m_looper->createTimer(nullptr);
+			m_looper->startTimer(m_timer_id, 0, 1 * 1000);
 		}
 	}
 
@@ -137,6 +137,10 @@ private:
 	{
 		if (msg->m_msg_type == -1)
 			m_looper->stopLoop();
+		//if (msg->m_msg_type % 10000 == 0)
+		//{
+		//	slog_i("recv msg %0", msg->m_msg_type);
+		//}
 	}
 
 	virtual void onMessageTimerTick(uint64_t timer_id, void * user_data)
@@ -147,10 +151,10 @@ private:
 };
 
 
-void __testPerformanceMsgLoopThread()
+void __testMsgLoopThreadPerformance()
 {
 	printf("\n__testPerformanceMsgLoopThread ---------------------------------------------------------\n");
-	__initLog(ELogLevel_info);
+	__initLog(ELogLevel_debug);
 	__TestPerformanceMsgLoopThreadHandler* h = new __TestPerformanceMsgLoopThreadHandler();
 	MessageLoopThread* t = new MessageLoopThread(h);
 	h->init(t->getLooper());
@@ -158,11 +162,16 @@ void __testPerformanceMsgLoopThread()
 
 	uint64_t start_ms = TimeUtil::getMsTime();
 	int msg_count = 100 * 10000;
-	for (int i = 0; i < msg_count; ++i)
+	for (int i = 1; i <= msg_count; ++i)
 	{
 		Message* msg = new Message();
 		msg->m_msg_type = i;
 		t->getLooper()->postMessage(msg);
+
+		//if (i == msg_count)
+		//{
+		//	slog_i("post msg=%0", i);
+		//}
 	}
 	uint64_t post_all_msg_end_ms = TimeUtil::getMsTime();
 
@@ -186,7 +195,7 @@ void __testThread()
 	//__testMutex();
 	//__testCondition();
 	//__testSem();
-	__testPerformanceMsgLoopThread();
+	__testMsgLoopThreadPerformance();
 }
 
 

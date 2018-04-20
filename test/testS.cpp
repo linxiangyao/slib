@@ -51,19 +51,21 @@ USING_NAMESPACE_S
 int main(int argc, char** argv)
 {
 	printf("test start **************************************************************\n");
-	/*
-	__testBinary();
-	__testVarint();
-	__testStringUtil();
-	__testFileUtil();
-	__testLog();
-	__testThread();
-	__testMisc();
-	__testSqlite();*/
-//__ClientCgi_CheckVersion c;
-//__ClientSendPackBuilder b;
-//__testStPacker();
-//__testClientNetwork();
+	//__testMsgLoopThread();
+	__testMsgLoopThreadPerformance();
+	
+	//__testBinary();
+	//__testVarint();
+	//__testStringUtil();
+	//__testFileUtil();
+	//__testLog();
+	//__testThread();
+	//__testMisc();
+	//__testSqlite();
+	//__ClientCgi_CheckVersion c;
+	//__ClientSendPackBuilder b;
+	//__testStPacker();
+	//__testClientNetwork();
 
 	printf("test end **************************************************************\n");
     return 0;
