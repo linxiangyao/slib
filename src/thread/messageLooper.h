@@ -67,6 +67,8 @@ private:
 
 
 	void __onLoopWakeup();
+	void __onLoopWakeupEvents();
+	void __onLoopWakeupTimers();
 	void __onTickAndGetNeedCallbackTimers(std::vector<__TimerCallbackCtx>* need_callback_ctxs);
 
 

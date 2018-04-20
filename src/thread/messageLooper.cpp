@@ -69,26 +69,42 @@ public:
 		m_last_callback_time_ms = 0;
 	}
 
-	void onTick(uint64_t cur_time_ms, bool* is_need_callback, uint64_t* next_callback_ms)
+	void onTick(uint64_t cur_time_ms, bool* is_cur_need_callback, uint64_t* next_callback_ms)
 	{
-		*is_need_callback = false;
+		//slog_d("onTick m_id=%0, m_is_running=%1, m_delay_ms=%2, m_circle_ms=%3, m_start_time_ms=%4, m_last_callback_time_ms=%5"
+		//	, m_id, m_is_running, m_delay_ms, m_circle_ms, m_start_time_ms, m_last_callback_time_ms);
+
+		__onTick(cur_time_ms, is_cur_need_callback, next_callback_ms);
+		if (*next_callback_ms <= cur_time_ms)
+			slog_e("MessageLooper::__Timer::onTick err! *next_callback_ms <= cur_time_ms");
+
+		//slog_d("onTick m_id=%0, m_is_running=%1, m_delay_ms=%2, m_circle_ms=%3, m_start_time_ms=%4, m_last_callback_time_ms=%5"
+		//	, m_id, m_is_running, m_delay_ms, m_circle_ms, m_start_time_ms, m_last_callback_time_ms);
+		//slog_d("onTick m_id=%0, start_time_ms=%1, last_callback_ms=%2, next_callback_ms=%3", m_id, m_start_time_ms, m_last_callback_time_ms, *next_callback_ms);
+	}
+
+	void __onTick(uint64_t cur_time_ms, bool* is_cur_need_callback, uint64_t* next_callback_ms)
+	{
+		*is_cur_need_callback = false;
 		*next_callback_ms = (uint64_t)-1;
 
 		if (!m_is_running)
 			return;
 
 		// once timer
-		if (m_circle_ms == 0) 
+		if (m_circle_ms == 0)
 		{
 			uint64_t need_callback_ms = m_start_time_ms + m_delay_ms;
-			if (cur_time_ms > need_callback_ms)
+			if (cur_time_ms >= need_callback_ms)
 			{
-				*is_need_callback = true;
+				*is_cur_need_callback = true;
+				*next_callback_ms = (uint64_t)-1;
 				onStop();
 			}
 			else
 			{
-				// nothing todo
+				*is_cur_need_callback = false;
+				*next_callback_ms = need_callback_ms;
 			}
 		}
 
@@ -107,16 +123,18 @@ public:
 
 			if (cur_time_ms > need_callback_ms)
 			{
-				*is_need_callback = true;
-				m_last_callback_time_ms = m_last_callback_time_ms + m_circle_ms * ((cur_time_ms - m_last_callback_time_ms) / m_circle_ms);
+				*is_cur_need_callback = true;
+				m_last_callback_time_ms = need_callback_ms + m_circle_ms * ((cur_time_ms - need_callback_ms) / m_circle_ms);
 				*next_callback_ms = m_last_callback_time_ms + m_circle_ms;
 			}
 			else
 			{
-				// nothing todo
+				*is_cur_need_callback = false;
+				*next_callback_ms = need_callback_ms + m_circle_ms;
 			}
 		}
 	}
+
 
 	bool m_is_running;
 	uint64_t m_id;
@@ -200,10 +218,7 @@ void MessageLooper::loop()
 			m_cond.wait_until(_l, std::chrono::system_clock::now() + std::chrono::milliseconds(m_cond_wait_ms));
 		}
 		
-		while (m_events.size() > 0 && !m_is_stop_loop)
-		{
-			__onLoopWakeup();
-		}
+		__onLoopWakeup();
 
 		if (m_is_stop_loop)
 			break;
@@ -480,6 +495,20 @@ void MessageLooper::stopTimer(uint64_t timer_id)
 
 void MessageLooper::__onLoopWakeup()
 {
+	while (true)
+	{
+		__onLoopWakeupEvents();
+		__onLoopWakeupTimers();
+
+		if (m_is_stop_loop)
+			break;
+		if (m_events.size() == 0)
+			break;
+	}
+}
+
+void MessageLooper::__onLoopWakeupEvents()
+{
 	if (m_is_stop_loop)
 		return;
 
@@ -490,16 +519,6 @@ void MessageLooper::__onLoopWakeup()
 			delete_and_erase_vector_element_by_index(&m_msg_handlers, i);
 		}
 	}
-
-	for (int i = (int)m_timer_handlers.size() - 1; i >= 0; --i)
-	{
-		if (m_timer_handlers[i]->m_is_remove)
-		{
-			delete_and_erase_vector_element_by_index(&m_timer_handlers, i);
-		}
-	}
-
-
 
 	// event callback
 	{
@@ -517,7 +536,21 @@ void MessageLooper::__onLoopWakeup()
 			need_callback_events.erase(need_callback_events.begin());
 		}
 	}
+}
 
+void MessageLooper::__onLoopWakeupTimers()
+{
+	if (m_is_stop_loop)
+		return;
+
+	for (int i = (int)m_timer_handlers.size() - 1; i >= 0; --i)
+	{
+		if (m_timer_handlers[i]->m_is_remove)
+		{
+			delete_and_erase_vector_element_by_index(&m_timer_handlers, i);
+		}
+	}
+	
 	// timer callback
 	{
 		std::vector<__TimerCallbackCtx> need_callback_timers;
@@ -542,19 +575,19 @@ void MessageLooper::__onTickAndGetNeedCallbackTimers(std::vector<__TimerCallback
 	for (__IdToTimerMap::iterator it = m_id_to_timer_map.begin(); it != m_id_to_timer_map.end(); ++it)
 	{
 		__Timer* timer = it->second;
-		bool is_need_callback = false;
+		bool is_cur_need_callback = false;
 		uint64_t next_callback_ms = -1;
 
-		timer->onTick(cur_time_ms, &is_need_callback, &next_callback_ms);
-		if (!is_need_callback)
-			continue;
+		timer->onTick(cur_time_ms, &is_cur_need_callback, &next_callback_ms);
 
 		min_next_callback_ms = min(next_callback_ms, min_next_callback_ms);
-
-		__TimerCallbackCtx ctx;
-		ctx.m_timer_id = timer->m_id;
-		ctx.m_user_data = timer->m_user_data;
-		need_callback_ctxs->push_back(ctx);
+		if (is_cur_need_callback)
+		{
+			__TimerCallbackCtx ctx;
+			ctx.m_timer_id = timer->m_id;
+			ctx.m_user_data = timer->m_user_data;
+			need_callback_ctxs->push_back(ctx);
+		}
 	}
 
 	if (min_next_callback_ms == (uint64_t)-1)
