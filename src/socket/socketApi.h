@@ -232,7 +232,7 @@ public:
 	static bool send(SOCKET s, const byte_t* data, size_t data_len);
 
 
-    static bool getIpByName(const char* name, uint32_t* ip); // will block
+    static bool getIpByName(const char* name, std::vector<uint32_t>* ips); // will block
     static bool ipToStr(uint32_t ip, std::string* ip_str);
     static bool ipToUint32(const std::string& ip_str, uint32_t* ip);
     static bool isValidSocket(socket_id_t s);

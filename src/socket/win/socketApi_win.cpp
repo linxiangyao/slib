@@ -28,13 +28,14 @@ void releaseSocketLib()
 // inner static funtion --------------------------------------------------------------------------------------
 static bool __bindAndListen(SOCKET svr_socket, const std::string& svrIpOrName, int svrPort)
 {
-    uint32_t svrIp = 0;
-	if (!SocketUtil::getIpByName(svrIpOrName.c_str(), &svrIp))
+	std::vector<uint32_t> ips;
+	if (!SocketUtil::getIpByName(svrIpOrName.c_str(), &ips))
 	{
 		slog_e("__bindAndListen fail to getIpByName!");
 		return false;
 	}
 
+	uint32_t svrIp = ips[0];
     struct sockaddr_in serverAddress;
     SocketUtil::initAddr(&serverAddress, svrIp, svrPort);
 
@@ -114,12 +115,13 @@ void SocketUtil::initAddr(struct sockaddr_in* addr, uint32_t ip, int port)
 
 bool SocketUtil::connect(SOCKET client_socket, const std::string& svr_ip_or_name, int svr_port)
 {
-	uint32_t svr_ip = 0;
-	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &svr_ip))
+	std::vector<uint32_t> ips;
+	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &ips))
 	{
 		slog_e("connect fail to getIpByName!");
 		return false;
 	}
+	uint32_t svr_ip = ips[0];
 
 	struct sockaddr_in serverAddress;
 	SocketUtil::initAddr(&serverAddress, svr_ip, svr_port);
@@ -193,17 +195,21 @@ bool SocketUtil::send(SOCKET s, const byte_t* data, size_t data_len)
 	return true;
 }
 
-bool SocketUtil::getIpByName(const char* name, uint32_t* ip)
+bool SocketUtil::getIpByName(const char* name, std::vector<uint32_t>* ips)
 {
-	if (ipToUint32(name, ip))
+	ips->clear();
+
+	uint32_t ip = 0;
+	if (ipToUint32(name, &ip))
 	{
+		ips->push_back(ip);
 		return true;
 	}
 
 	struct hostent* host = gethostbyname(name);
 	if (host == NULL)
 	{
-		slog_w("gethostbyname error");
+		slog_w("SocketUtil::getIpByName failt to gethostbyname");
 		return false;
 	}
 
@@ -218,16 +224,21 @@ bool SocketUtil::getIpByName(const char* name, uint32_t* ip)
 	//
 	//printf("\naddress list: \n");
 	if (host->h_addr_list[0] == NULL)
+	{
+		slog_w("SocketUtil::getIpByName host->h_addr_list[0] == NULL");
 		return false;
+	}
 
-	*ip = ((struct in_addr *)host->h_addr_list[0])->s_addr;
+	//*ip = ((struct in_addr *)host->h_addr_list[0])->s_addr;
 
-	//for (int i = 0; host->h_addr_list[i]; i++) {
-	//    struct in_addr * p = (struct in_addr *)host->h_addr_list[i];
-	//    struct in_addr  a = *p;
-	//    const char *ip = inet_ntoa(a);
-	//    printf("\nip: %s  \n", ip);
-	//}
+	for (int i = 0; host->h_addr_list[i]; i++) {
+		ip = ((struct in_addr *)host->h_addr_list[0])->s_addr;
+		ips->push_back(ip);
+		//struct in_addr * p = (struct in_addr *)host->h_addr_list[i];
+		//struct in_addr  a = *p;
+		//const char *ip = inet_ntoa(a);
+		//printf("\nip: %s  \n", ip);
+	}
 
 	return true;
 }
