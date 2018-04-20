@@ -45,10 +45,78 @@ class MessageLooper::__Timer
 public:
 	__Timer() { m_is_running = false; m_id = 0; m_user_data = nullptr; m_delay_ms = 0; m_circle_ms = 0; m_start_time_ms = 0; m_last_callback_time_ms = 0; }
 	~__Timer() { }
-	void onStart(uint32_t delay_ms, uint32_t circle_ms);
-	void onStop();
-	void onTick(bool* is_need_call_back);
-	uint32_t getNextCallbackMsSpan();
+
+	void onStart(uint32_t delay_ms, uint32_t circle_ms)
+	{
+		if (m_is_running)
+			return;
+		m_is_running = true;
+
+		m_delay_ms = delay_ms;
+		m_circle_ms = circle_ms;
+		m_start_time_ms = TimeUtil::getMsTime();
+		m_last_callback_time_ms = 0;
+		//slog_d("__Timer::onStart m_delay_ms=%0, m_circle_ms=%1", m_delay_ms, m_circle_ms);
+	}
+
+	void onStop()
+	{
+		//slog_d("__Timer::onStop");
+		m_is_running = false;
+		m_delay_ms = 0;
+		m_circle_ms = 0;
+		m_start_time_ms = 0;
+		m_last_callback_time_ms = 0;
+	}
+
+	void onTick(uint64_t cur_time_ms, bool* is_need_callback, uint64_t* next_callback_ms)
+	{
+		*is_need_callback = false;
+		*next_callback_ms = (uint64_t)-1;
+
+		if (!m_is_running)
+			return;
+
+		// once timer
+		if (m_circle_ms == 0) 
+		{
+			uint64_t need_callback_ms = m_start_time_ms + m_delay_ms;
+			if (cur_time_ms > need_callback_ms)
+			{
+				*is_need_callback = true;
+				onStop();
+			}
+			else
+			{
+				// nothing todo
+			}
+		}
+
+		// circle timer
+		else
+		{
+			uint64_t need_callback_ms = 0;
+			if (m_last_callback_time_ms == 0)
+			{
+				need_callback_ms = m_start_time_ms + m_delay_ms;
+			}
+			else
+			{
+				need_callback_ms = m_last_callback_time_ms + m_circle_ms;
+			}
+
+			if (cur_time_ms > need_callback_ms)
+			{
+				*is_need_callback = true;
+				m_last_callback_time_ms = m_last_callback_time_ms + m_circle_ms * ((cur_time_ms - m_last_callback_time_ms) / m_circle_ms);
+				*next_callback_ms = m_last_callback_time_ms + m_circle_ms;
+			}
+			else
+			{
+				// nothing todo
+			}
+		}
+	}
 
 	bool m_is_running;
 	uint64_t m_id;
@@ -100,7 +168,7 @@ MessageLooper::MessageLooper() : m_is_stop_loop(false), m_mutex()
 {
 	slog_d("new MessageLooper=%0", (uint64_t)this);
 	m_timer_id_seed = 0;
-	m_wait_time_out_ms = -1;
+	m_cond_wait_ms = -1;
 }
 
 MessageLooper::~MessageLooper()
@@ -120,13 +188,25 @@ void MessageLooper::loop()
     sscope_d();
     while (true)
     {
-		std::unique_lock<std::mutex> _l(m_mutex);		
-		m_cond.wait_until(_l, std::chrono::system_clock::now() + std::chrono::milliseconds(1));
-		//printf("MessageLooper wakeup, m_wait_time_out_ms=%u\n", (uint32_t)m_wait_time_out_ms);
+		std::unique_lock<std::mutex> _l(m_mutex);
+		if (m_cond_wait_ms == (uint64_t)-1)
+		{
+			//slog_d("MessageLooper wait forever");
+			m_cond.wait(_l);
+		}
+		else
+		{
+			//slog_d("MessageLooper wait, m_cond_wait_ms=%0", m_cond_wait_ms);
+			m_cond.wait_until(_l, std::chrono::system_clock::now() + std::chrono::milliseconds(m_cond_wait_ms));
+		}
+		
+		while (m_events.size() > 0 && !m_is_stop_loop)
+		{
+			__onLoopWakeup();
+		}
 
 		if (m_is_stop_loop)
 			break;
-		__onLoopWakeup();
     }
 }
 
@@ -197,7 +277,12 @@ void MessageLooper::postMessage(Message* msg)
 		delete msg;
 		return;
 	}
+
+	size_t old_size = m_events.size();
 	m_events.push_back(new __Event(msg));
+	if (m_events.size() != old_size + 1)
+		slog_e("MessageLooper::postMessage fail to m_events.push_back");
+
     m_cond.notify_one();
 }
 
@@ -210,11 +295,15 @@ void MessageLooper::postMessages(std::list<Message*>* msgs)
 		return;
 	}
 
+	size_t old_size = m_events.size();
 	for (std::list<Message*>::iterator it = msgs->begin(); it != msgs->end(); ++it)
 	{
 		m_events.push_back(new __Event(*it));
 	}
+	if (m_events.size() != old_size + msgs->size())
+		slog_e("MessageLooper::postMessages fail to m_events.push_back");
 	msgs->clear();
+
 	m_cond.notify_one();
 }
 
@@ -227,9 +316,13 @@ void MessageLooper::postMessage(Message* msg, uint32_t delay_ms)
 		return;
 	}
 
+	size_t old_size = m_events.size();
 	__Event* e = new __Event(msg);
 	e->m_time_out_time = TimeUtil::getMsTime() + delay_ms;
 	m_events.push_back(e);
+	if (m_events.size() != old_size + 1)
+		slog_e("MessageLooper::postMessage fail to m_events.push_back");
+
 	m_cond.notify_one();
 }
 
@@ -351,7 +444,9 @@ void MessageLooper::releasseTimer(uint64_t timer_id)
 	__Timer* timer = __getTimerByTimerId(timer_id);
 	if (timer == NULL)
 		return;
+
 	delete_and_erase_map_element_by_key(&m_id_to_timer_map, timer_id);
+	m_cond.notify_one();
 }
 
 bool MessageLooper::startTimer(uint64_t timer_id, uint32_t delay_ms, uint32_t circle_ms)
@@ -360,8 +455,9 @@ bool MessageLooper::startTimer(uint64_t timer_id, uint32_t delay_ms, uint32_t ci
 	__Timer* timer = __getTimerByTimerId(timer_id);
 	if (timer == NULL)
 		return false;
+
 	timer->onStart(delay_ms, circle_ms);
-	__update_wait_time_out_ms();
+	m_cond.notify_one();
 	return true; 
 }
 
@@ -371,8 +467,9 @@ void MessageLooper::stopTimer(uint64_t timer_id)
 	__Timer* timer = __getTimerByTimerId(timer_id);
 	if (timer == NULL)
 		return;
+
 	timer->onStop();
-	__update_wait_time_out_ms();
+	m_cond.notify_one();
 }
 
 
@@ -440,17 +537,33 @@ void MessageLooper::__onLoopWakeup()
 
 void MessageLooper::__onTickAndGetNeedCallbackTimers(std::vector<__TimerCallbackCtx>* need_callback_ctxs)
 {
+	uint64_t cur_time_ms = TimeUtil::getMsTime();
+	uint64_t min_next_callback_ms = (uint64_t)-1;
 	for (__IdToTimerMap::iterator it = m_id_to_timer_map.begin(); it != m_id_to_timer_map.end(); ++it)
 	{
 		__Timer* timer = it->second;
-		bool is_need_call_back = false;
-		timer->onTick(&is_need_call_back);
-		if (!is_need_call_back)
+		bool is_need_callback = false;
+		uint64_t next_callback_ms = -1;
+
+		timer->onTick(cur_time_ms, &is_need_callback, &next_callback_ms);
+		if (!is_need_callback)
 			continue;
+
+		min_next_callback_ms = min(next_callback_ms, min_next_callback_ms);
+
 		__TimerCallbackCtx ctx;
 		ctx.m_timer_id = timer->m_id;
 		ctx.m_user_data = timer->m_user_data;
 		need_callback_ctxs->push_back(ctx);
+	}
+
+	if (min_next_callback_ms == (uint64_t)-1)
+	{
+		m_cond_wait_ms = -1;
+	}
+	else
+	{
+		m_cond_wait_ms = min_next_callback_ms - cur_time_ms;
 	}
 }
 
@@ -575,115 +688,11 @@ MessageLooper::__Timer* MessageLooper::__getTimerByTimerId(uint64_t timer_id)
 	return it->second;
 }
 
-void MessageLooper::__update_wait_time_out_ms()
-{
-	uint32_t min_callback_ms_span = -1;
-	for (__IdToTimerMap::iterator it = m_id_to_timer_map.begin(); it != m_id_to_timer_map.end(); ++it)
-	{
-		__Timer* timer = it->second;
-		uint32_t next_callback_ms_span = timer->getNextCallbackMsSpan();
-		//printf("next_callback_ms_span=%u\n", next_callback_ms_span);
-		if(next_callback_ms_span < min_callback_ms_span)
-			min_callback_ms_span = next_callback_ms_span;
-	}
-	m_wait_time_out_ms = min_callback_ms_span;
-}
 
 
 
-
-
-
-
-
-
-
-// __Timer -------------------------------------------------------------------------------
-void MessageLooper::__Timer::onStart(uint32_t delay_ms, uint32_t circle_ms)
-{
-	if (m_is_running)
-		return;
-	m_is_running = true;
-	m_delay_ms = delay_ms;
-	m_circle_ms = circle_ms;
-	m_start_time_ms = TimeUtil::getMsTime();
-	m_last_callback_time_ms = 0;
-	//printf("__Timer::onStart m_delay_ms=%u, m_circle_ms=%u\n", m_delay_ms, m_circle_ms);
-}
-
-void MessageLooper::__Timer::onStop()
-{
-	//printf("__Timer::onStop\n");
-	m_is_running = false;
-	m_delay_ms = 0;
-	m_circle_ms = 0;
-	m_start_time_ms = 0;
-	m_last_callback_time_ms = 0;
-}
-
-void MessageLooper::__Timer::onTick(bool* is_need_call_back)
-{
-	*is_need_call_back = false;
-	if (!m_is_running)
-		return;
-
-	uint64_t first_call_time_ms = m_start_time_ms + m_delay_ms;
-	uint64_t cur_time_ms = TimeUtil::getMsTime();
-	if (cur_time_ms < first_call_time_ms)
-		return;
-
-	//printf("m_last_callback_time_ms=%llu, cur_time_ms=%llu\n", m_last_callback_time_ms, cur_time_ms);
-	if (m_circle_ms == 0)
-	{
-		onStop();
-		*is_need_call_back = true;
-		return;
-	}
-
-	if (m_last_callback_time_ms == 0)
-	{
-		m_last_callback_time_ms = first_call_time_ms;
-		*is_need_call_back = true;
-		return;
-	}
-
-	uint64_t callback_count = (cur_time_ms - m_last_callback_time_ms) / m_circle_ms;
-	if (callback_count > 0)
-	{
-		m_last_callback_time_ms += callback_count * m_circle_ms;
-		//printf("m_last_callback_time_ms=%llu, callback_count=%llu\n", m_last_callback_time_ms, callback_count);
-		*is_need_call_back = true;
-	}
-}
-
-uint32_t MessageLooper::__Timer::getNextCallbackMsSpan()
-{
-	if(!m_is_running)
-		return -1;
-
-	uint64_t first_call_time_ms = m_start_time_ms + m_delay_ms;
-	uint64_t cur_time_ms = TimeUtil::getMsTime();
-	//printf("getNextCallbackMsSpan: m_delay_ms=%u, m_circle_ms=%u, m_start_time_ms=%llu, m_last_callback_time_ms=%llu, cur_time_ms=%llu\n"
-	//	, m_delay_ms, m_circle_ms, m_start_time_ms, m_last_callback_time_ms, cur_time_ms);
-	if (m_last_callback_time_ms == 0) // never clallbck
-	{
-		if (cur_time_ms >= first_call_time_ms)
-			return 0;
-		else
-			return (uint32_t)(first_call_time_ms - cur_time_ms);
-	}
-	else
-	{
-		uint64_t now_and_last_call_time_span = cur_time_ms - m_last_callback_time_ms;
-		if (now_and_last_call_time_span >= m_circle_ms)
-			return 0;
-		else
-			return (uint32_t)(m_circle_ms - now_and_last_call_time_span);
-	}
-}
 
 
 
 
 S_NAMESPACE_END
-

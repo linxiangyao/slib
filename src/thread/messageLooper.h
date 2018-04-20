@@ -80,7 +80,6 @@ private:
 	void __removeEventByIndex(__EventList& events, __EventListIt it);
 	int __getTimerHandlerIndexByTimerHandler(IMessageTimerHandler* handler);
 	__Timer* __getTimerByTimerId(uint64_t timer_id);
-	void __update_wait_time_out_ms();
 
 
 
@@ -88,7 +87,7 @@ private:
     bool m_is_stop_loop;
     std::mutex m_mutex;
     std::condition_variable m_cond;
-	int m_wait_time_out_ms;
+	uint64_t m_cond_wait_ms;
 
 	__EventList m_events;
 	std::vector<__MsgHandler*> m_msg_handlers;
