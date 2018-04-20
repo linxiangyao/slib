@@ -44,7 +44,7 @@ bool operator != (const session_id_t& l, const session_id_t& r)
 
 // ServerCgi ------------------------------------------------------------------------------------
 
-session_id_t ServerCgi::getSessionId()
+session_id_t ServerNetwork::ServerCgi::getSessionId()
 {
 	if (m_send_pack != nullptr)
 		return m_send_pack->m_ssid;
@@ -54,7 +54,7 @@ session_id_t ServerCgi::getSessionId()
 		return session_id_t();
 }
 
-void ServerCgi::__setSendPack(SendPack * send_pack)
+void ServerNetwork::ServerCgi::__setSendPack(SendPack * send_pack)
 {
 	m_send_pack = send_pack;
 	if (send_pack == nullptr)
