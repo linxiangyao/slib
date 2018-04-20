@@ -207,6 +207,11 @@ void MessageLooper::loop()
     while (true)
     {
 		std::unique_lock<std::mutex> _l(m_mutex);
+		__onLoopWakeup();
+
+		if (m_is_stop_loop)
+			break;
+
 		if (m_cond_wait_ms == (uint64_t)-1)
 		{
 			//slog_d("MessageLooper wait forever");
@@ -218,10 +223,6 @@ void MessageLooper::loop()
 			m_cond.wait_until(_l, std::chrono::system_clock::now() + std::chrono::milliseconds(m_cond_wait_ms));
 		}
 		
-		__onLoopWakeup();
-
-		if (m_is_stop_loop)
-			break;
     }
 }
 
