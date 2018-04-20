@@ -6,7 +6,6 @@ SCLIENT_NAMESPACE_BEGIN
 
 
 
-
 /*
 client network.
 
@@ -110,17 +109,55 @@ public:
 		virtual void unpackClientRecvPack(const byte_t* raw_data, size_t raw_data_len, UnpackResult* result) = 0;
 	};
 
+	class ClientCgi
+	{
+	public:
+		ClientCgi() { m_send_pack = nullptr; m_recv_pack = nullptr; m_err_type = EErrType_ok; m_err_code = 0; m_start_ms = 0; m_end_ms = 0; }
+		virtual ~ClientCgi() { delete m_send_pack; delete m_recv_pack; }
+
+		virtual const ClientCgiInfo& getCgiInfo() const = 0;
+
+
+		RecvPack*	getRecvPack() { return m_recv_pack; }
+		SendPack*	getSendPack() { return m_send_pack; }
+		EErrType	getErrType() { return m_err_type; }
+		int			getErrCode() { return m_err_code; }
+		bool		getIsSuccess() { return getErrType() == EErrType_ok && getErrCode() == 0; }
+		uint64_t	getStartMs() { return m_start_ms; }
+		uint64_t	getEndMs() { return m_end_ms; }
+
+		void		setSendPack(SendPack* send_pack) { m_send_pack = send_pack; }
+		void		setRecvPack(RecvPack* recv_pack) { m_recv_pack = recv_pack; onSetRecvPackEnd(); }
+		void		setErrType(EErrType err_type) { m_err_code = err_type; }
+		void		setErrCode(int err_code) { m_err_code = err_code; }
+		void		setStartMs(uint64_t ms) { m_start_ms = ms; }
+		void		setEndMs(uint64_t ms) { m_end_ms = ms; }
+
+
+	protected:
+		virtual void onSetRecvPackEnd() {}
+
+
+	private:
+		SendPack* m_send_pack;
+		RecvPack* m_recv_pack;
+		EErrType m_err_type;
+		int m_err_code;
+		uint64_t m_start_ms;
+		uint64_t m_end_ms;
+	};
+
 	class ICallback
 	{
 	public:
 		virtual ~ICallback() {}
-		virtual void onClientNetworkStatred(ClientNetwork* network) = 0;
-		virtual void onClientNetworkStopped(ClientNetwork* network) = 0;
-		virtual void onClientNetworkConnectStateChanged(ClientNetwork* network, EConnectState state) = 0;
-		virtual void onClientNetworkSendPackEnd(ClientNetwork* network, EErrType err_type, int err_code, uint64_t send_pack_id, std::unique_ptr<RecvPack>* recv_pack) = 0;
-		virtual void onClientNetworkRecvPack(ClientNetwork* network, std::unique_ptr<RecvPack>* recv_pack) = 0;
+		virtual void onClientNetwork_statred(ClientNetwork* network) = 0;
+		virtual void onClientNetwork_stopped(ClientNetwork* network) = 0;
+		virtual void onClientNetwork_connectStateChanged(ClientNetwork* network, EConnectState state) = 0;
+		virtual void onClientNetwork_recvS2cPushPack(ClientNetwork* network, std::unique_ptr<RecvPack>* recv_pack) = 0;
+		virtual void onClientNetwork_recvS2cReqPack(ClientNetwork* network, std::unique_ptr<RecvPack>* recv_pack) = 0;
+		virtual void onClientNetwork_cgiDone(ClientNetwork* network, ClientCgi* cgi) = 0;
 	};
-
 
 	class SvrInfo
 	{
@@ -145,6 +182,7 @@ public:
 			m_connect_interval_mss.push_back(5 * 1000);
 			m_is_repeat_last_connect_interval_ms = true;
 			m_callback = nullptr;
+			m_max_pack_count = 1000;
 		}
 
 		MessageLooper* m_work_looper;
@@ -155,8 +193,8 @@ public:
 		IUnpacker* m_unpacker;
 		std::vector<int32_t> m_connect_interval_mss;
 		bool m_is_repeat_last_connect_interval_ms;
+		uint32_t m_max_pack_count;
 	};
-
 
 
 
@@ -170,9 +208,8 @@ public:
 	void stop();
 
 	SendPack* newSendPack(uint64_t send_pack_id, uint32_t send_cmd_type, uint32_t send_seq); // if send_seq == -1, network will generate send_seq
-	bool sendPack(const SendPack& send_pack);
-	void cancelSendPack(uint64_t pack_id);
-	bool updateReconnectIntervals(const std::vector<uint32_t> intervalMss) { return true; }
+	bool startCgi(ClientCgi* cgi);
+	void stopCgi(ClientCgi* cgi);
 
 
 
@@ -201,45 +238,52 @@ private:
 		__EConnectState_disconnected,
 	};
 
-	enum __ELoginState
-	{
-		__ELoginState_login,
-		__ELoginState_logout,
-	};
-
-	class __SendPackInfo // Spi
+	class __CgiCtx
 	{
 	public:
-		__SendPackInfo() { m_is_cancel = false; m_create_time = 0; m_cgi_info = NULL; }
-		~__SendPackInfo() { }
-		//void copy(const SendPack& send_pack) { *(SendPack*)this = send_pack; }
+		__CgiCtx() { m_is_sent = false; m_create_time = 0; m_cgi = nullptr; }
+		~__CgiCtx() { }
 
-		bool m_is_cancel;
+		bool m_is_sent;
 		uint64_t m_create_time;
-		SendPack m_pack;
-		ClientCgiInfo* m_cgi_info;
+		ClientCgi* m_cgi;
 	};
-
-	typedef __SendPackInfo __WaitRespPackInfo; // Wpi
-
+	
 	class __ClientCtx
 	{
 	public:
-		__ClientCtx() { m_sid = 0; m_connect_state = __EConnectState_disconnected; m_sending_pack_index = -1; m_svr_port = 0; }
+		__ClientCtx();
+		~__ClientCtx();
 
-		void resetConnectState()
-		{
-			m_connect_state = __EConnectState_disconnected;
-			m_recv_data.clear();
-			m_sending_pack_index = -1;
-		}
+		void addCgi(ClientCgi* cgi);
+		void cancelCgi(ClientCgi* cgi);
+		bool doSendPack();
+		void checkTimeOutPacks();
+		int getCgiIndexBySendPackId(uint64_t send_pack_id);
+		size_t getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
 
-		socket_id_t m_sid;
-		__EConnectState m_connect_state;
-		int m_sending_pack_index;
+		void onSendPackEnd();
+		void onConnected();
+		void onDisconnected();
+		void onRecvPack(RecvPack* recv_pack);
+
+
+		void __resetConnectState();
+		void __markCgiDoneByIndex(int index, EErrType err_type, int err_code);
+		int __getMaxPrioryCgiIndex();
+		ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
+		int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
+
+
 		std::string m_svr_ip;
 		uint32_t m_svr_port;
+		socket_id_t m_sid;
+		__EConnectState m_connect_state;
+		int m_sending_cgi_index;
 		Binary m_recv_data;
+		std::vector<__CgiCtx*> m_cgi_ctxs;
+		InitParam* m_init_param;
+		ClientNetwork* m_network;
 	};
 
 
@@ -247,8 +291,6 @@ private:
 	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override;
 
 	void __onMsgSendPack(Message* msg);
-	void __onMsgNetworkStatusChanged(Message* msg);
-	void __onMsgForgroundChanged(Message* msg);
 	void __onMsgTcpSocketClientConnected(ITcpSocketCallbackApi::ClientSocketConnectedMsg* msg);
 	void __onMsgTcpSocketClientDisconnected(ITcpSocketCallbackApi::ClientSocketDisconnectedMsg* msg);
 	void __onMsgTcpSocketClientSendDataEnd(ITcpSocketCallbackApi::ClientSocketSendDataEndMsg* msg);
@@ -260,26 +302,14 @@ private:
 
 
 
-	bool __doSendPack();
-	bool __doSendTcpPack();
 	bool __doConnectTcpSvr();
 	bool __doTestSvrSpeed();
-	void __checkTimeOutPacks();
+	void __postSendPackMsgToSelf();
+	void __postMsgToSelf(Message* msg);
 
 	bool __isTimeToConnect();
-	void __postSendPackMsgToSelf();
-	//void __postMsgToTarget(Message* msg);
-	void __postMsgToSelf(Message* msg);
-	void __postSendPackTimeOutMsg(__SendPackInfo* p);
-	int __getMaxPriorySpiIndex();
-	int __getMaxPrioryNoSessionSpiIndex();
-	int __getSpiIndexBySendPackId(uint64_t send_pack_id);
-	int __getWpiIndexByRecvPackCmdTypeAndSeq(uint32_t cmd_type, uint64_t seq);
-	int __getWpiIndexBySendPackId(uint64_t send_pack_id);
-	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
-	size_t __getSendPackCountBySendPackCmdType(uint32_t cmd_type);
-	void __deleteAndEraseSpiByIndex(size_t index);
 	uint64_t __getConnectIntervalMs(size_t connect_count);
+	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
 	ClientCgiInfo* __getClientCgiInfoBySendCmdType(uint32_t send_cmd_type);
 	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
 
@@ -289,23 +319,22 @@ private:
 	bool m_is_running;
 	uint64_t m_timer_id;
 
+	ClientNetSpeedTester* m_speed_tester;
+	std::map<std::string, ClientNetSpeedTester::TestResult> m_speed_test_results;
+	bool m_is_testing_speed;
+
 	std::vector<int32_t> m_connect_interval_mss;
 	bool m_is_repeat_last_connect_interval_ms;
 	uint64_t m_last_reconnect_time_ms;
 	size_t m_connect_count;
 
-	ClientNetSpeedTester* m_speed_tester;
-	std::map<std::string, ClientNetSpeedTester::TestResult> m_speed_test_results;
-	bool m_is_testing_speed;
 
 	__ClientCtx m_client_ctx;
-	std::vector<__SendPackInfo*> m_send_pack_infos;
-	std::vector<__WaitRespPackInfo*> m_wait_resp_pack_infos;
 };
 
 
 
-
+typedef ClientNetwork::ClientCgi ClientCgi;
 
 
 

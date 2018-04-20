@@ -1,15 +1,13 @@
 #ifndef S_SIMPLE_CLIENT_NETWORK_CONSOLE_APP_H_
 #define S_SIMPLE_CLIENT_NETWORK_CONSOLE_APP_H_
 #include "clientNetwork.h"
-#include "clientCgi.h"
-#include "clientCgiMgr.h"
 #include "../../console/consoleApp.h"
 SCLIENT_NAMESPACE_BEGIN
 
 
 
 
-class SimpleClientNetworkConsoleLogic : public IConsoleAppLogic, public ClientCgi::ICallback, public ClientCgiMgr::ICallback
+class SimpleClientNetworkConsoleLogic : public IConsoleAppLogic, public ClientNetwork::ICallback
 {
 public:
 	void init(const std::string& svr_ip, uint32_t svr_port, const std::map<uint32_t, ClientCgiInfo>& cgi_infos, ClientNetwork::IUnpacker* unpacker)
@@ -30,7 +28,6 @@ protected:
 		initSocketLib();
 
 		m_sapi = new TcpSocketCallbackApi();
-		m_cgi_mgr = new ClientCgiMgr();
 		m_network = new ClientNetwork();
 
 		// sapi
@@ -52,7 +49,7 @@ protected:
 			param.m_unpacker = m_unpacker;
 			param.m_sapi = m_sapi;
 			param.m_work_looper = getLooper();
-			param.m_callback = m_cgi_mgr;
+			param.m_callback = this;
 			param.m_svr_infos.push_back(svr_info);
 			param.m_send_cmd_type_to_cgi_info_map = m_cgi_infos;
 
@@ -60,19 +57,6 @@ protected:
 			{
 				printf("fail to m_network->init\n");
 				m_console_api->exit();
-				return;
-			}
-		}
-
-		// cgi mgr
-		{
-			ClientCgiMgr::InitParam param;
-			param.m_network = m_network;
-			param.m_callback = this;
-			copy_map_values_to_vector(m_cgi_infos, &param.m_cgi_infos);
-			if (!m_cgi_mgr->init(param))
-			{
-				printf("fail to m_cgi_mgr->init\n");
 				return;
 			}
 		}
@@ -91,21 +75,22 @@ protected:
 		printf("exiting...\n");
 		if(m_network != nullptr)
 			m_network->stop();
-		delete m_cgi_mgr;
 		delete m_network;
 		delete m_sapi;
 		releaseSocketLib();
 		printf("exit\n");
 	}
 
-	virtual void onClientCgi_cgiDone(ClientCgi * cgi) override {}
-	virtual void onClientCgiMgr_recvS2cPushPack(std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
-	virtual void onClientCgiMgr_recvS2cReqPack(std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
+	virtual void onClientNetwork_statred(ClientNetwork* network) override {}
+	virtual void onClientNetwork_stopped(ClientNetwork* network) override {}
+	virtual void onClientNetwork_connectStateChanged(ClientNetwork* network, ClientNetwork::EConnectState state) override {}
+	virtual void onClientNetwork_recvS2cPushPack(ClientNetwork* network, std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
+	virtual void onClientNetwork_recvS2cReqPack(ClientNetwork* network, std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
+	virtual void onClientNetwork_cgiDone(ClientNetwork* network, ClientCgi* cgi) override {}
 
 
 	MessageLooper* getLooper() { return &(m_console_api->getMessageLooper()); }
 	ClientNetwork* getNetwork() { return m_network; }
-	ClientCgiMgr* getCgiMgr() { return m_cgi_mgr; }
 
 
 
@@ -116,7 +101,6 @@ private:
 	IConsoleAppApi* m_console_api;
 	ITcpSocketCallbackApi* m_sapi;
 	ClientNetwork* m_network;
-	ClientCgiMgr* m_cgi_mgr;
 	std::string m_svr_ip;
 	uint32_t m_svr_port;
 	std::map<uint32_t, ClientCgiInfo> m_cgi_infos;
@@ -135,7 +119,7 @@ private:
 
 
 
-class ClientNetworkMsgLooperHandler : public IMessageLoopHandler, public ClientCgi::ICallback, public ClientCgiMgr::ICallback
+class ClientNetworkMsgLooperHandler : public IMessageLoopHandler, public ClientNetwork::ICallback
 {
 #define MSG_TYPE_ClientNetworkMsgLooperHandler_startCmd 9827171
 #define MSG_TYPE_ClientNetworkMsgLooperHandler_stopCmd 9827172
@@ -143,7 +127,6 @@ class ClientNetworkMsgLooperHandler : public IMessageLoopHandler, public ClientC
 public:
 	ClientNetworkMsgLooperHandler()
 	{
-		m_cgi_mgr = nullptr;
 		m_network = nullptr;
 		m_sapi = nullptr;
 		m_packer = nullptr;
@@ -153,7 +136,6 @@ public:
 	{
 		if (m_network != nullptr)
 			m_network->stop();
-		delete m_cgi_mgr;
 		delete m_network;
 		delete m_sapi;
 		delete m_packer;
@@ -217,9 +199,12 @@ protected:
 	}
 
 	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override {}
-	virtual void onClientCgi_cgiDone(ClientCgi * cgi) override {}
-	virtual void onClientCgiMgr_recvS2cPushPack(std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
-	virtual void onClientCgiMgr_recvS2cReqPack(std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
+	virtual void onClientNetwork_statred(ClientNetwork* network) override {}
+	virtual void onClientNetwork_stopped(ClientNetwork* network) override {}
+	virtual void onClientNetwork_connectStateChanged(ClientNetwork* network, ClientNetwork::EConnectState state) override {}
+	virtual void onClientNetwork_recvS2cPushPack(ClientNetwork* network, std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
+	virtual void onClientNetwork_recvS2cReqPack(ClientNetwork* network, std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
+	virtual void onClientNetwork_cgiDone(ClientNetwork* network, ClientCgi* cgi) override {}
 	virtual void onMsg_startCmd_before(Message* msg) {}
 	virtual void onMsg_startCmd_end(Message* msg) {}
 	virtual void onMsg_stopCmd_before(Message* msg) {}
@@ -235,7 +220,6 @@ protected:
 
 	MessageLooper * getLooper() { return m_init_param.m_looper; }
 	ClientNetwork* getNetwork() { return m_network; }
-	ClientCgiMgr* getCgiMgr() { return m_cgi_mgr; }
 	StPacker* getPacker() { return m_packer; }
 
 
@@ -253,7 +237,6 @@ private:
 		initSocketLib();
 
 		m_sapi = new TcpSocketCallbackApi();
-		m_cgi_mgr = new ClientCgiMgr();
 		m_network = new ClientNetwork();
 		m_packer = new StPacker();
 
@@ -275,26 +258,13 @@ private:
 			param.m_unpacker = m_packer;
 			param.m_sapi = m_sapi;
 			param.m_work_looper = getLooper();
-			param.m_callback = m_cgi_mgr;
+			param.m_callback = this;
 			param.m_svr_infos.push_back(svr_info);
 			param.m_send_cmd_type_to_cgi_info_map = m_init_param.m_cgi_infos;
 
 			if (!m_network->init(param))
 			{
 				slog_e("fail to m_network->init");
-				return;
-			}
-		}
-
-		// cgi mgr
-		{
-			ClientCgiMgr::InitParam param;
-			param.m_network = m_network;
-			param.m_callback = this;
-			copy_map_values_to_vector(m_init_param.m_cgi_infos, &param.m_cgi_infos);
-			if (!m_cgi_mgr->init(param))
-			{
-				slog_e("fail to m_cgi_mgr->init");
 				return;
 			}
 		}
@@ -319,7 +289,6 @@ private:
 	ClientNetworkMsgLooperHandlerInitParam m_init_param;
 	ITcpSocketCallbackApi* m_sapi;
 	ClientNetwork* m_network;
-	ClientCgiMgr* m_cgi_mgr;
 	StPacker* m_packer;
 };
 
