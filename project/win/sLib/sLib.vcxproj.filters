@@ -179,6 +179,9 @@
     <ClInclude Include="..\..\..\src\db\sqlite\sqliteLib.h">
       <Filter>db\sqlite</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\socket\dnsResolver.h">
+      <Filter>socket</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="comm">
@@ -347,6 +350,12 @@
     </ClCompile>
     <ClCompile Include="..\..\..\src\network\packer\simpleTcpPacker.cpp">
       <Filter>network\packer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\socket\dnsResolver.cpp">
+      <Filter>socket</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\socket\socketApi.cpp">
+      <Filter>socket</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

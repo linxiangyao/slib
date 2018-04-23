@@ -4,6 +4,7 @@
 
 #include "socketApiType.h"
 #include "socketApi.h"
+#include "dnsResolver.h"
 #include "linux/socketApi_linux.h"
 #include "win/socketApi_win.h"
 

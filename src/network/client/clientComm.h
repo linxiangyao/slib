@@ -1,7 +1,6 @@
 #ifndef S_CLIENT_COMM_H_
 #define S_CLIENT_COMM_H_
 #include "../comm/networkComm.h"
-#include "../../socket/socketLib.h"
 #include "../../util/stringUtil.h"
 #include "../../util/timeUtil.h"
 

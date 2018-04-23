@@ -34,6 +34,7 @@
     <ClInclude Include="..\..\..\test\testFileUtil.h" />
     <ClInclude Include="..\..\..\test\testP.h" />
     <ClInclude Include="..\..\..\test\testSqlite.h" />
+    <ClInclude Include="..\..\..\test\testDnsResolver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\test\testS.cpp" />

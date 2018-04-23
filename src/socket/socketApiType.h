@@ -2,30 +2,31 @@
 #define S_SOCKET_API_TYPE_H_
 #include "../comm/comm.h"
 #include "../util/stringUtil.h"
+#if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
+	#include <vector>
+	#include <stdio.h>
+	#include <errno.h>
+	#include <string.h>
+	#include <stdlib.h>
+
+	#include <netdb.h>
+	#include <arpa/inet.h>
+	#include <sys/ioctl.h>
+	#include <fcntl.h>
+	#include <stdio.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <unistd.h>
+	#include <sys/shm.h>
+#endif
 S_NAMESPACE_BEGIN
 
 
-#if defined(S_OS_LINUX) | defined(S_OS_MAC)
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/shm.h>
-#endif
-
 #ifdef WIN32
 #else
-#define SOCKET int
+	#define SOCKET int
 #endif
 
 typedef SOCKET socket_t;

@@ -1,6 +1,7 @@
 #ifndef S_CLIENT_NETWORK_H_
 #define S_CLIENT_NETWORK_H_
 #include "clientComm.h"
+#include "../comm/dnsResolver.h"
 #include "clientNetSpeedTester.h"
 SCLIENT_NAMESPACE_BEGIN
 

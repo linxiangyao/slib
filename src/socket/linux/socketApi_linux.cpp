@@ -1,7 +1,5 @@
-#include "../../comm/comm.h"
-//#define S_OS_LINUX
-#if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
 #include "socketApi_linux.h"
+#if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
 S_NAMESPACE_BEGIN
 
 

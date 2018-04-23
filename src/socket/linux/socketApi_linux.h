@@ -1,27 +1,8 @@
 #ifndef S_SOCKET_API_LINUX_H_
 #define S_SOCKET_API_LINUX_H_
-#include "../../comm/comm.h"
+#include "../socketApi.h"
 //#define S_OS_LINUX
 #if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
-#include <vector>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/shm.h>
-#include "../../thread/threadLib.h"
-#include "../socketApi.h"
 S_NAMESPACE_BEGIN
 
 
@@ -169,6 +150,6 @@ private:
 
 
 S_NAMESPACE_END
-#endif //defined(S_OS_LINUX) | defined(S_OS_MAC)
+#endif
 #endif //S_SOCKET_API_LINUX_H_
 
