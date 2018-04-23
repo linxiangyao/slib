@@ -130,8 +130,8 @@ private:
 		str = str + "name=" + record.m_name + ", ";
 		for (size_t i = 0; i < record.m_ips.size(); ++i)
 		{
-			const DnsResolver::Ip& ip = record.m_ips[i];
-			if (ip.m_ip_type == DnsResolver::EIpType_v4)
+			const Ip& ip = record.m_ips[i];
+			if (ip.m_ip_type == EIpType_v4)
 			{
 				str = str + "ipv4=" + StringUtil::toString((uint8_t*)&ip.m_ip_value, 4) + ", ";
 			}

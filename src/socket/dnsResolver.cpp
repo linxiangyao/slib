@@ -192,12 +192,12 @@ void DnsResolver::__doResolve()
 
 bool DnsResolver::__strToIp(const std::string& str, in_addr * ip_v4)
 {
-	return inet_pton(AF_INET, "127.0.0.1", ip_v4) == 1;
+	return inet_pton(AF_INET, str.c_str(), ip_v4) == 1;
 }
 
 bool DnsResolver::__strToIp(const std::string& str, in6_addr * ip_v6)
 {
-	return inet_pton(AF_INET6, "::FFFF:127.0.0.1", ip_v6) == 1;
+	return inet_pton(AF_INET6, str.c_str(), ip_v6) == 1;
 }
 
 

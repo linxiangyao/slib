@@ -25,449 +25,71 @@ void releaseSocketLib()
 }
 
 
-// inner static funtion --------------------------------------------------------------------------------------
-static bool __bindAndListen(SOCKET svr_socket, const std::string& svrIpOrName, int svrPort)
-{
-	std::vector<uint32_t> ips;
-	if (!SocketUtil::getIpByName(svrIpOrName.c_str(), &ips))
-	{
-		slog_e("__bindAndListen fail to getIpByName!");
-		return false;
-	}
-
-	uint32_t svrIp = ips[0];
-    struct sockaddr_in serverAddress;
-    SocketUtil::initAddr(&serverAddress, svrIp, svrPort);
-
-    int enable = 1;
-    if (setsockopt(svr_socket, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable)) != 0)
-    {
-        slog_e("__bindAndListen fail to setsockopt SO_REUSEADDR!");
-        return false;
-    }
-
-    if (bind(svr_socket, (LPSOCKADDR)&serverAddress, sizeof(sockaddr_in)) == SOCKET_ERROR)
-    {
-		slog_e("__bindAndListen fail to bind, error code : %d", WSAGetLastError());
-        return false;
-    }
-
-    if (listen(svr_socket, 5) == SOCKET_ERROR)
-    {
-		slog_e("__bindAndListen fail to listen, error code : %d", WSAGetLastError());
-        return false;
-    }
-
-    return true;
-}
-
-static bool __accept(SOCKET svrSocket, SOCKET* svrTransSocket)
-{
-    *svrTransSocket = INVALID_SOCKET;
-
-    char remote_ip_str[16];
-    memset(remote_ip_str, 0, 16);
-    uint16_t remote_port;
-
-    struct sockaddr_in from_addr;
-    memset(&from_addr, 0, sizeof(struct sockaddr_in));
-    int addr_len = sizeof(sockaddr_in);
-
-    *svrTransSocket = accept(svrSocket, (struct sockaddr*)&from_addr, &addr_len);
-    if (*svrTransSocket == INVALID_SOCKET)
-    {
-        slog_e("__accept fail to accept, error code : %d", WSAGetLastError());
-        return false;
-    }
-    char* from_ip_str = inet_ntoa(from_addr.sin_addr);
-    memcpy(remote_ip_str, from_ip_str, strlen(from_ip_str));
-    remote_port = ntohs(from_addr.sin_port);
-
-    return true;
-}
-
-static bool __changeSocketToAsync(SOCKET s)
-{
-    DWORD ul = 1;
-	if (0 != ioctlsocket(s, FIONBIO, &ul))
-	{
-		slog_e("__changeSocketToAsync fail to ioctlsocket");
-		return false;
-	}
-        
-    return true;
-}
-
-
-
-
-
-
-
 // SocketUtil --------------------------------------------------------------------------------------
-void SocketUtil::initAddr(struct sockaddr_in* addr, uint32_t ip, int port)
-{
-	memset(addr, 0, sizeof(sockaddr_in));
-	addr->sin_family = AF_INET;
-	addr->sin_addr.s_addr = ip;
-	addr->sin_port = htons((short)port);
-}
 
-bool SocketUtil::connect(SOCKET client_socket, const std::string& svr_ip_or_name, int svr_port)
-{
-	std::vector<uint32_t> ips;
-	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &ips))
-	{
-		slog_e("connect fail to getIpByName!");
-		return false;
-	}
-	uint32_t svr_ip = ips[0];
-
-	struct sockaddr_in serverAddress;
-	SocketUtil::initAddr(&serverAddress, svr_ip, svr_port);
-
-	if (::connect(client_socket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR)
-	{
-		if (WSAGetLastError() == WSAEWOULDBLOCK)
-			return true;
-		slog_e("connect fail to connect, ip=%0, port=%1!", svr_ip_or_name.c_str(), svr_port);
-		return false;
-	}
-	return true;
-}
-
-bool SocketUtil::recv(SOCKET s, byte_t* buf, size_t bufLen, size_t* recvLen)
+bool SocketUtil::recv(socket_t s, byte_t* buf, size_t bufLen, size_t* recvLen)
 {
 	*recvLen = 0;
 	int ret = ::recv(s, (char*)buf, (int)bufLen, 0);
-	if (ret > 0)
+
+	if (ret < 0)
 	{
-		*recvLen = ret;
-		return true;
+		if (WSAGetLastError() == WSAEWOULDBLOCK)
+			return true;
+		else
+			return false;
 	}
 	else if (ret == 0)
 	{
-		//?
-		//slog_i("tcpSocketRecv disconnected");
 		return false;
 	}
 	else
 	{
-		if (WSAGetLastError() == WSAEWOULDBLOCK)
-			return true;
-		//slog_e("tcpSocketRecv recv failed, error code : %d", WSAGetLastError());
-		return false;
+		*recvLen = ret;
+		return true;
 	}
-
-	return true;
 }
 
-bool SocketUtil::send(SOCKET s, const byte_t* data, size_t data_len, size_t* real_send)
+bool SocketUtil::send(socket_t s, const byte_t* data, size_t data_len, size_t* real_send)
 {
 	int ret = ::send(s, (const char*)data, (int)data_len, 0);
+
 	if (ret <= 0)
 	{
 		*real_send = 0;
 		if (WSAGetLastError() == WSAEWOULDBLOCK)
 			return true;
-		return false;
-	}
-	
-	*real_send = ret;
-	return true;
-}
-
-bool SocketUtil::send(SOCKET s, const byte_t* data, size_t data_len)
-{
-	while (true)
-	{
-		size_t real_send = 0;
-		bool isOk = send(s, data, data_len, &real_send);
-		if (!isOk)
+		else
 			return false;
-		if (real_send >= data_len) {
-			return true;
-		}
-
-		data += real_send;
-		data_len -= real_send;
 	}
-	return true;
-}
-
-bool SocketUtil::getIpByName(const char* name, std::vector<uint32_t>* ips)
-{
-	ips->clear();
-
-	uint32_t ip = 0;
-	if (ipToUint32(name, &ip))
+	else
 	{
-		ips->push_back(ip);
+		*real_send = ret;
 		return true;
 	}
+}
 
-	struct hostent* host = gethostbyname(name);
-	if (host == NULL)
+void SocketUtil::closeSocket(socket_t s)
+{
+	::closesocket(s);
+}
+
+bool SocketUtil::changeSocketToAsync(socket_t s)
+{
+	DWORD ul = 1;
+	if (0 != ioctlsocket(s, FIONBIO, &ul))
 	{
-		slog_w("SocketUtil::getIpByName failt to gethostbyname");
+		slog_e("SocketUtil::changeSocketToAsync fail to ioctlsocket");
 		return false;
-	}
-
-	// printf("official name: %s\n\n", host->h_name);
-	//  printf("address length: %d bytes\n\n", host->h_length);
-
-
-	//printf("host name alias: \n");
-	//for (int i = 0; host->h_aliases[i]; i++) {
-	//    printf("%s\n", host->h_aliases[i]);
-	//}
-	//
-	//printf("\naddress list: \n");
-	if (host->h_addr_list[0] == NULL)
-	{
-		slog_w("SocketUtil::getIpByName host->h_addr_list[0] == NULL");
-		return false;
-	}
-
-	//*ip = ((struct in_addr *)host->h_addr_list[0])->s_addr;
-
-	for (int i = 0; host->h_addr_list[i]; i++) {
-		ip = ((struct in_addr *)host->h_addr_list[0])->s_addr;
-		ips->push_back(ip);
-		//struct in_addr * p = (struct in_addr *)host->h_addr_list[i];
-		//struct in_addr  a = *p;
-		//const char *ip = inet_ntoa(a);
-		//printf("\nip: %s  \n", ip);
 	}
 
 	return true;
 }
 
-bool SocketUtil::ipToStr(uint32_t ip, std::string* ipStr)
+int SocketUtil::getErr()
 {
-	const char * sz = inet_ntoa(*((struct in_addr *)&ip));
-	if (sz == NULL)
-		return false;
-
-	*ipStr = sz;
-	return true;
+	return WSAGetLastError();
 }
-
-bool SocketUtil::ipToUint32(const std::string& ipStr, uint32_t* ip)
-{
-	*ip = inet_addr(ipStr.c_str());
-	if (INADDR_NONE == *ip)
-		return false;
-	return true;
-}
-
-bool SocketUtil::isValidSocket(socket_id_t s)
-{
-	//return s.m_socket != INVALID_SOCKET;
-	return s > 0;
-}
-
-uint16_t SocketUtil::hToNs(uint16_t s)
-{
-	return htons(s);
-}
-
-uint32_t SocketUtil::hToNl(uint32_t l)
-{
-	return htonl(l);
-}
-
-uint16_t SocketUtil::nToHs(uint16_t s)
-{
-	return ntohs(s);
-}
-
-uint32_t SocketUtil::nToHl(uint32_t l)
-{
-	return ntohl(l);
-}
-
-
-
-
-
-
-// SocketBlockApi --------------------------------------------------------------------------------------
-ITcpSocketBlockApi* ITcpSocketBlockApi::newBlockApi()
-{
-	return new TcpSocketBlockApi();
-}
-
-TcpSocketBlockApi::TcpSocketBlockApi()
-{
-    m_sid = 0;
-}
-
-TcpSocketBlockApi::~TcpSocketBlockApi()
-{
-	for (__SocketCtxMap::iterator it = m_client_ctxs.begin(); it != m_client_ctxs.end(); ++it)
-	{
-		closeSocket(it->second->m_socket);
-	}
-	delete_and_erase_collection_elements(&m_client_ctxs);
-}
-
-bool TcpSocketBlockApi::openSocket(socket_id_t* sid)
-{
-    if (sid == NULL)
-        return false;
-    *sid = 0;
-
-    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET)
-        return false;
-
-    ScopeMutex __l(m_mutex);
-    __SocketCtx* ctx = new __SocketCtx();
-    ctx->m_sid = ++m_sid;
-    ctx->m_socket = s;
-    m_client_ctxs[ctx->m_sid] = ctx;
-
-	*sid = ctx->m_sid;
-    return true;
-}
-
-void TcpSocketBlockApi::closeSocket(socket_id_t sid)
-{
-    if (sid <= 0)
-        return;
-
-    ScopeMutex __l(m_mutex);
-    std::map<socket_id_t, __SocketCtx*>::iterator it = m_client_ctxs.find(sid);
-    if (it == m_client_ctxs.end())
-        return;
-
-    ::closesocket(it->second->m_socket);
-    delete it->second;
-    m_client_ctxs.erase(it);
-}
-
-bool TcpSocketBlockApi::bindAndListen(socket_id_t svr_listen_sid, const std::string& svr_ip_or_name, int svr_port)
-{
-    __SocketCtx ctx;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getClientCtxById(svr_listen_sid, &ctx))
-			return false;
-	}
-
-    if (!__bindAndListen(ctx.m_socket, svr_ip_or_name, svr_port))
-        return false;
-
-    return true;
-}
-
-bool TcpSocketBlockApi::accept(socket_id_t svr_listen_sid, socket_id_t* svr_tran_socket_id)
-{
-    __SocketCtx ctx;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getClientCtxById(svr_listen_sid, &ctx))
-			return false;
-	}
-
-    SOCKET svr_listen_socket = ctx.m_socket;
-    SOCKET svr_tran_socket = INVALID_SOCKET;
-    if (!__accept(svr_listen_socket, &svr_tran_socket))
-        return false;
-
-    ScopeMutex __l(m_mutex);
-    __SocketCtx* client_ctx = new __SocketCtx();
-    client_ctx->m_sid = ++m_sid;
-    client_ctx->m_socket = svr_tran_socket;
-    m_client_ctxs[client_ctx->m_sid] = client_ctx;
-    *svr_tran_socket_id = client_ctx->m_sid;
-    return true;
-}
-
-bool TcpSocketBlockApi::connect(socket_id_t client_sid, const std::string& svrIpOrName, int svrPort)
-{
-    __SocketCtx ctx;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getClientCtxById(client_sid, &ctx))
-			return false;
-	}
-
-    if (!SocketUtil::connect(ctx.m_socket, svrIpOrName, svrPort))
-        return false;
-    return true;
-}
-
-void TcpSocketBlockApi::disconnect(socket_id_t sid)
-{
-	ScopeMutex __l(m_mutex);
-    __SocketCtx ctx;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getClientCtxById(sid, &ctx))
-			return;
-	}
-
-    shutdown(ctx.m_socket, SD_BOTH);
-}
-
-bool TcpSocketBlockApi::send(socket_id_t sid, const byte_t* data, size_t data_len)
-{
-    __SocketCtx ctx;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getClientCtxById(sid, &ctx))
-			return false;
-	}
-
-    while (true)
-    {
-        size_t real_send = 0;
-        bool isOk = SocketUtil::send(ctx.m_socket, data, data_len, &real_send);
-        if (!isOk)
-            return false;
-        if (real_send >= data_len) {
-            return true;
-        }
-    
-        data_len -= real_send;
-    }
-    return true;
-}
-
-bool TcpSocketBlockApi::recv(socket_id_t sid, byte_t* buf, size_t bufLen, size_t* recv_len)
-{
-    __SocketCtx ctx;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getClientCtxById(sid, &ctx))
-			return false;
-	}
-
-    bool ret = SocketUtil::recv(ctx.m_socket, buf, bufLen, recv_len);
-    return ret;
-}
-
-
-
-bool TcpSocketBlockApi::__getClientCtxById(socket_id_t sid, __SocketCtx* ctx)
-{
-    if (sid <= 0)
-        return NULL;
-    std::map<socket_id_t, __SocketCtx*>::iterator it = m_client_ctxs.find(sid);
-    if (it == m_client_ctxs.end())
-        return NULL;
-    *ctx = *it->second;
-    return true;
-}
-
-
-
-
-
-
-
 
 
 
@@ -494,13 +116,13 @@ static bool __createCompleteIoHandle(HANDLE* h_io)
     return true;
 }
 
-static bool __bindCompleteIoHandleAndSocket(SOCKET s, HANDLE h_io, void* user_data)
+static bool __bindCompleteIoHandleAndSocket(socket_t s, HANDLE h_io, void* user_data)
 {
     if (CreateIoCompletionPort((HANDLE)s, h_io, (ULONG_PTR)user_data, 0) == NULL)
         return false;
 }
 
-static bool __createAndBindIoHandleToSocket(HANDLE* h_io, SOCKET s, void* user_data)
+static bool __createAndBindIoHandleToSocket(HANDLE* h_io, socket_t s, void* user_data)
 {
     if (!__createCompleteIoHandle(h_io))
         return false;
@@ -530,7 +152,7 @@ static bool __waitSocketEvent(WSAEVENT break_event, WSAEVENT socket_event, int* 
     return true;
 }
 
-static bool __createSocketEventAndObserverSocket(WSAEVENT* socket_event, SOCKET s, int event_flag)
+static bool __createSocketEventAndObserverSocket(WSAEVENT* socket_event, socket_t s, int event_flag)
 {
     WSAEVENT e = WSACreateEvent();
     if (e == WSA_INVALID_EVENT)
@@ -671,7 +293,7 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
 		return true;
 	}
 
-    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    socket_t s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s == INVALID_SOCKET)
 	{
 		slog_e("startClientSocket fail to create socket, cient_sid=%0", client_sid);
@@ -807,7 +429,7 @@ bool TcpSocketCallbackApi::startSvrListenSocket(socket_id_t svr_listen_sid)
 		return true;
 	}
 
-	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	socket_t s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s == INVALID_SOCKET)
 	{
 		slog_e("startSvrListenSocket fail to create socket, svr_listen_sid=%0", svr_listen_sid);
@@ -1011,7 +633,7 @@ void TcpSocketCallbackApi::__onSvrListenSocketAcceptedMsg(Message * msg)
 {
 	ScopeMutex __l(m_mutex);
 	socket_id_t svr_listen_sid = msg->m_args.getUint64("svr_listen_sid");
-	SOCKET svr_tran_socket = msg->m_args.getUint32("svr_tran_socket");
+	socket_t svr_tran_socket = msg->m_args.getUint32("svr_tran_socket");
 	__SocketCtx* ctx_listen = __getSvrListenCtxById(svr_listen_sid);
 	if (ctx_listen == NULL)
 		return;
@@ -1243,7 +865,7 @@ Thread* TcpSocketCallbackApi::__getThreadById(socket_id_t sid)
 
 
 // __ClientRun --
-TcpSocketCallbackApi::__ClientRun::__ClientRun(void* msg_target, MessageLooper* notify_looper, socket_id_t sid, SOCKET s, const std::string& svr_ip_or_name, int svr_port)
+TcpSocketCallbackApi::__ClientRun::__ClientRun(void* msg_target, MessageLooper* notify_looper, socket_id_t sid, socket_t s, const std::string& svr_ip_or_name, int svr_port)
 {
     m_socket = s;
     m_sid = sid;
@@ -1308,7 +930,7 @@ void TcpSocketCallbackApi::__ClientRun::__run()
 
 	{
 		ScopeMutex __l(m_mutex);
-		//if (!__changeSocketToAsync(m_socket))
+		//if (!SocketUtil::changeSocketToAsync(m_socket))
 		//	return;
 
 		if (!__createSocketEventAndObserverSocket(&m_socket_event, m_socket, FD_WRITE | FD_READ | FD_CLOSE))
@@ -1467,7 +1089,7 @@ void TcpSocketCallbackApi::__ClientRun::__clearSession()
 
 
 // __SvrListenRun --
-TcpSocketCallbackApi::__SvrListenRun::__SvrListenRun(MessageLooper* notify_looper, void* notify_target, SOCKET s, socket_id_t sid, const std::string& svr_ip_or_name, int svr_port)
+TcpSocketCallbackApi::__SvrListenRun::__SvrListenRun(MessageLooper* notify_looper, void* notify_target, socket_t s, socket_id_t sid, const std::string& svr_ip_or_name, int svr_port)
 {
 	m_callback_looper = notify_looper;
 	m_notify_target = notify_target;
@@ -1519,13 +1141,13 @@ void TcpSocketCallbackApi::__SvrListenRun::__run()
 	__postMsgToTarget(msg);
 	//slog_d("__postMsgToTarget EMsgType_svrListenSocketStarted end");
 
-    if (!__bindAndListen(m_socket, m_svr_ip_or_name, m_svr_port))
+    if (!SocketUtil::bindAndListen(m_socket, m_svr_ip_or_name, m_svr_port))
         return;
 
     while (true)
     {
-        SOCKET svr_tran_socket;
-		if (!__accept(m_socket, &svr_tran_socket))
+        socket_t svr_tran_socket;
+		if (!SocketUtil::accept(m_socket, &svr_tran_socket))
 			return;
 		if (m_is_exit)
 			return;
@@ -1551,7 +1173,7 @@ void TcpSocketCallbackApi::__SvrListenRun::__postMsgToTarget(Message * msg)
 
 
 // __SvrTransRun --
-TcpSocketCallbackApi::__SvrTransRun::__SvrTransRun(SOCKET s, socket_id_t sid, MessageLooper* notify_looper, void* notify_target)
+TcpSocketCallbackApi::__SvrTransRun::__SvrTransRun(socket_t s, socket_id_t sid, MessageLooper* notify_looper, void* notify_target)
 {
     m_socket = s;
     m_sid = sid;
@@ -1612,7 +1234,7 @@ void TcpSocketCallbackApi::__SvrTransRun::__run()
     if (m_break_event == WSA_INVALID_EVENT)
         return;
     
-    if (!__changeSocketToAsync(m_socket))
+    if (!SocketUtil::changeSocketToAsync(m_socket))
         return;
 
     if (!__createSocketEventAndObserverSocket(&m_socket_event, m_socket, FD_WRITE | FD_READ | FD_CLOSE))

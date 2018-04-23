@@ -10,55 +10,6 @@
 S_NAMESPACE_BEGIN
 
 
- 
-
-
-
-class TcpSocketBlockApi : public ITcpSocketBlockApi
-{
-public:
-    TcpSocketBlockApi();
-    ~TcpSocketBlockApi();
-
-    // create/close
-    virtual bool openSocket(socket_id_t* s);
-    virtual void closeSocket(socket_id_t s);
-
-    // svr
-    virtual bool bindAndListen(socket_id_t svr_listen_sid, const std::string& svr_ip_or_name, int svr_port);
-    virtual bool accept(socket_id_t svr_listen_sid, socket_id_t* svr_tran_socket);
-
-    // client
-    virtual bool connect(socket_id_t client_sid, const std::string& svr_ip_or_name, int svr_port);
-    virtual void disconnect(socket_id_t client_sid);
-
-    // transport
-    virtual bool send(socket_id_t sid, const byte_t* data, size_t data_len);
-    virtual bool recv(socket_id_t sid, byte_t* buf, size_t buf_len, size_t* recv_len);
-
-
-
-private:
-    class __SocketCtx
-    {
-    public:
-        socket_id_t m_sid;
-        SOCKET m_socket;
-    };
-
-
-     bool __getClientCtxById(socket_id_t sid, __SocketCtx* ctx);
-
-
-    std::mutex m_mutex;
-	typedef std::map<socket_id_t, __SocketCtx*> __SocketCtxMap;
-	__SocketCtxMap m_client_ctxs;
-    int64_t m_sid;
-};
-
-
-
-
 
 
 class TcpSocketCallbackApi : public ITcpSocketCallbackApi, private IMessageLoopHandler
@@ -69,7 +20,7 @@ public:
 
 
 	// ITcpSocketCallbackApi
-	virtual bool init(MessageLooper* work_looper);
+	virtual bool init(MessageLooper* work_looper = nullptr);
 
 	// client
 	virtual bool createClientSocket(socket_id_t* client_sid, const CreateClientSocketParam& param);
@@ -91,6 +42,8 @@ public:
 	// svr tran
 	virtual void stopSvrTranSocket(socket_id_t svr_tran_sid);
 	virtual bool sendDataFromSvrTranSocketToClient(socket_id_t svr_tran_sid, const byte_t* data, size_t data_len);
+
+
 
 
 

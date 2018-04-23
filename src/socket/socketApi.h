@@ -191,7 +191,7 @@ public:
 
 
 	virtual ~ITcpSocketCallbackApi() {}
-	virtual bool init(MessageLooper* work_looper) = 0;
+	virtual bool init(MessageLooper* work_looper = nullptr) = 0;
 
     // client
     virtual bool createClientSocket(socket_id_t* client_sid, const CreateClientSocketParam& param) = 0;
@@ -218,28 +218,74 @@ public:
 
 
 
-
-
-
 // util
 class SocketUtil
 {
 public:
-	static void initAddr(struct sockaddr_in* addr, uint32_t ip, int port);
-	static bool connect(SOCKET client_socket, const std::string& svrIpOrName, int svrPort);
-	static bool recv(SOCKET s, byte_t* buf, size_t bufLen, size_t* recvLen);
-	static bool send(SOCKET s, const byte_t* data, size_t data_len, size_t* real_send);
-	static bool send(SOCKET s, const byte_t* data, size_t data_len);
+	static bool bindAndListen(socket_t s, const std::string& svr_ip_or_name, int svr_port);
+	static bool accept(socket_t svr_accept_socket, socket_t* svr_trans_socket);
+	static bool connect(socket_t client_socket, const std::string& svr_ip_or_name, int svr_port);
+	static bool recv(socket_t s, byte_t* buf, size_t buf_len, size_t* recv_len);
+	static bool send(socket_t s, const byte_t* data, size_t data_len, size_t* real_send);
+	static bool send(socket_t s, const byte_t* data, size_t data_len);
+	static void closeSocket(socket_t s);
+	static bool changeSocketToAsync(socket_t s);
+    static bool getIpByName(const char* name, std::vector<Ip>* ips); // will block
+	static int getErr();
 
 
-    static bool getIpByName(const char* name, std::vector<uint32_t>* ips); // will block
-    static bool ipToStr(uint32_t ip, std::string* ip_str);
-    static bool ipToUint32(const std::string& ip_str, uint32_t* ip);
-    static bool isValidSocket(socket_id_t s);
+	static bool ipToStr(Ip ip, std::string* ip_str);
+    static bool ipv4ToStr(in_addr ip_v4, std::string* ip_str);
+	static bool ipv6ToStr(in6_addr ip_v6, std::string* ip_str) { return true; }
+	static bool strToIp(const std::string& ip_str, Ip* ip) { return true; }
+    static bool strToIpv4(const std::string& ip_str, in_addr* ip_v4);
+	static bool strToIpv6(const std::string& ip_str, in6_addr* ip_v6) { return true; }
     static uint16_t hToNs(uint16_t s);
     static uint32_t hToNl(uint32_t l);
     static uint16_t nToHs(uint16_t s);
     static uint32_t nToHl(uint32_t l);
+    static bool isValidSocketId(socket_id_t s);
+
+private:
+	static void initAddr(struct sockaddr_in* addr, in_addr ip, int port);
+	static void initAddr(struct sockaddr_in6* addr, in6_addr ip, int port) {}
+};
+
+
+
+// block api ----------------------------------------------------------------------------------------------------------
+class TcpSocketBlockApi : public ITcpSocketBlockApi
+{
+public:
+	TcpSocketBlockApi();
+	~TcpSocketBlockApi();
+
+	// create/close
+	bool openSocket(socket_id_t* s);
+	void closeSocket(socket_id_t s);
+
+	// svr
+	bool bindAndListen(socket_id_t svr_listen_sid, const std::string& svr_ip_or_name, int svr_port);
+	bool accept(socket_id_t svr_listen_sid, socket_id_t* svr_tran_sid);
+
+	// client
+	bool connect(socket_id_t sid, const std::string& svr_ip_or_name, int svr_port);
+	void disconnect(socket_id_t sid);
+
+	// transport
+	bool send(socket_id_t sid, const byte_t* data, size_t data_len);
+	bool recv(socket_id_t sid, byte_t* buf, size_t buf_len, size_t* recv_len);
+
+
+
+
+private:
+	bool __getSocketBySid(socket_id_t sid, socket_t* socket);
+
+	typedef std::map<socket_id_t, socket_t> SidToSocketMap;
+	SidToSocketMap m_sid_2_socket;
+	socket_id_t m_sid_seed;
+	Mutex m_mutex;
 };
 
 

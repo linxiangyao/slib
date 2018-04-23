@@ -8,26 +8,6 @@ S_NAMESPACE_BEGIN
 class DnsResolver : public IMessageHandler
 {
 public:
-	enum EIpType
-	{
-		EIpType_v4,
-		EIpType_v6,
-	};
-
-	class Ip
-	{
-	public:
-		Ip(in_addr v4) { m_ip_type = EIpType_v4; m_ip_value.m_v4 = v4; }
-		Ip(in6_addr v6) { m_ip_type = EIpType_v6; m_ip_value.m_v6 = v6; }
-
-		EIpType m_ip_type;
-		union
-		{
-			in_addr m_v4;
-			in6_addr m_v6;
-		} m_ip_value;
-	};
-
 	class DnsRecord
 	{
 	public:

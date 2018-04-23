@@ -24,14 +24,18 @@
 S_NAMESPACE_BEGIN
 
 
+
+
 #ifdef WIN32
 #else
 	#define SOCKET int
+	#define INVALID_SOCKET -1
 #endif
 
 typedef SOCKET socket_t;
 typedef int64_t socket_id_t;
 typedef int64_t socket_select_event_id_t;
+
 
 enum ETcpSocketType
 {
@@ -59,6 +63,34 @@ public:
     std::string m_thread_pool_name;
     size_t m_thread_pool_thread_num;
 };
+
+
+
+
+enum EIpType
+{
+	EIpType_v4,
+	EIpType_v6,
+};
+
+class Ip
+{
+public:
+	Ip(in_addr v4) { m_ip_type = EIpType_v4; m_ip_value.m_v4 = v4; }
+	Ip(in6_addr v6) { m_ip_type = EIpType_v6; m_ip_value.m_v6 = v6; }
+
+	EIpType m_ip_type;
+	union
+	{
+		in_addr m_v4;
+		in6_addr m_v6;
+	} m_ip_value;
+};
+
+
+
+
+
 
 
 S_NAMESPACE_END

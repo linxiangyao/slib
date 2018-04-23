@@ -8,44 +8,6 @@ S_NAMESPACE_BEGIN
 
  
 
-// block api ----------------------------------------------------------------------------------------------------------
-class TcpSocketBlockApi : public ITcpSocketBlockApi
-{
-public:
-    TcpSocketBlockApi();
-    ~TcpSocketBlockApi();
-    
-    // create/close
-    bool openSocket(socket_id_t* s);
-    void closeSocket(socket_id_t s);
-
-    // svr
-    bool bindAndListen(socket_id_t svr_listen_sid, const std::string& svr_ip_or_name, int svr_port);
-    bool accept(socket_id_t svr_listen_sid, socket_id_t* svr_tran_sid);
-
-    // client
-    bool connect(socket_id_t sid, const std::string& svr_ip_or_name, int svr_port);
-    void disconnect(socket_id_t sid);
-
-    // transport
-    bool send(socket_id_t sid, const byte_t* data, size_t data_len);
-    bool recv(socket_id_t sid, byte_t* buf, size_t buf_len, size_t* recv_len);
-    
-private:
-    bool __getSocketBySid(int64_t socket_id, int* socket);
-
-	typedef std::map<int64_t, int> SidToSocketMap;
-	SidToSocketMap m_sid_2_socket;
-    int64_t m_sid_seed;
-    Mutex m_mutex;
-};
-
-
-
-
-
-// callback api ----------------------------------------------------------------------------------------------------------
-#define INVALID_SOCKET 0
 
 class TcpSocketCallbackApi : public ITcpSocketCallbackApi, private IMessageLoopHandler
 {
@@ -54,7 +16,7 @@ public:
     virtual ~TcpSocketCallbackApi();
     
    // ITcpSocketCallbackApi
-	virtual bool init(MessageLooper* work_looper);
+	virtual bool init(MessageLooper* work_looper = nullptr);
 
 	// client
 	virtual bool createClientSocket(socket_id_t* client_sid, const CreateClientSocketParam& param);
@@ -77,6 +39,8 @@ public:
 	virtual void stopSvrTranSocket(socket_id_t svr_tran_sid);
 	virtual bool sendDataFromSvrTranSocketToClient(socket_id_t svr_tran_sid, const byte_t* data, size_t data_len);
 
+
+
     
 private:
 	class __SocketCtx
@@ -86,7 +50,7 @@ private:
         ~__SocketCtx() { }
         
         ETcpSocketType m_socket_type;
-        int m_socket;
+        socket_t m_socket;
         socket_id_t m_sid;
 		socket_id_t m_ref_listen_sid;
         CreateClientSocketParam m_client_param;
@@ -124,11 +88,11 @@ private:
 
 	void __postMsgToTarget(Message* msg, __SocketCtx * ctx);
 	__SocketCtx* __getClientCtxById(socket_id_t sid);
-	__SocketCtx* __getClientCtxBySocket(int s);
+	__SocketCtx* __getClientCtxBySocket(socket_t s);
 	__SocketCtx* __getSvrListenCtxById(socket_id_t sid);
-	__SocketCtx* __getSvrListenCtxBySocket(int s);
+	__SocketCtx* __getSvrListenCtxBySocket(socket_t s);
 	__SocketCtx* __getSvrTranCtxById(socket_id_t sid);
-	__SocketCtx* __getSvrTranCtxBySocket(int s);
+	__SocketCtx* __getSvrTranCtxBySocket(socket_t s);
     
 
 
