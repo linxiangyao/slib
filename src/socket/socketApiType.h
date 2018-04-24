@@ -26,15 +26,17 @@ S_NAMESPACE_BEGIN
 
 
 
+
+
 #ifdef WIN32
 #else
 	#define SOCKET int
 	#define INVALID_SOCKET -1
 #endif
 
+
 typedef SOCKET socket_t;
 typedef int64_t socket_id_t;
-typedef int64_t socket_select_event_id_t;
 
 
 enum ETcpSocketType
@@ -45,34 +47,13 @@ enum ETcpSocketType
 };
 
 
-enum ETcpSocketThreadMode
-{
-    ETcpSocketThreadMode_singleThread,
-    ETcpSocketThreadMode_shareThread,
-    ETcpSocketThreadMode_threadPool,
-};
-
-
-class TcpSocketThreadConfig
-{
-public:
-    TcpSocketThreadConfig() { m_thread_mode = ETcpSocketThreadMode_singleThread; m_thread_pool_thread_num = 0; }
-    
-    ETcpSocketThreadMode m_thread_mode;
-    std::string m_share_thread_name;
-    std::string m_thread_pool_name;
-    size_t m_thread_pool_thread_num;
-};
-
-
-
-
 enum EIpType
 {
 	EIpType_none,
 	EIpType_v4,
 	EIpType_v6,
 };
+
 
 class Ip
 {

@@ -234,6 +234,7 @@ public:
 	static int getErr();
 
 
+	static bool ipToStr(const sockaddr* addr, std::string* ip_str);
 	static bool ipToStr(Ip ip, std::string* ip_str);
     static bool ipv4ToStr(in_addr ip_v4, std::string* ip_str);
 	static bool ipv6ToStr(in6_addr ip_v6, std::string* ip_str);
@@ -247,7 +248,7 @@ public:
     static bool isValidSocketId(socket_id_t s);
 
 private:
-	static bool __getIpByNameAndIinitAddr(const std::string& name, int port, sockaddr_in* addr_v4, sockaddr_in6* addr_v6, sockaddr** addr, int* addr_len);
+	static bool __getIpByNameAndIinitAddr(const std::string& name, int port, sockaddr_storage* addr, int* addr_len);
 	static void __initAddrV4(struct sockaddr_in* addr, in_addr ip, int port);
 	static void __initAddrV6(struct sockaddr_in6* addr, in6_addr ip, int port);
 };
