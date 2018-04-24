@@ -130,7 +130,7 @@ private:
 		{
 			*is_handled = true;
 			DnsResolver::Msg_ResolveEnd* m = (DnsResolver::Msg_ResolveEnd*)msg;
-			slog_i("is_ok=%0, record=%1", m->m_is_ok, __toStr(m->m_record));
+			slog_i("Msg_ResolveEnd is_ok=%0, record=%1", m->m_is_ok, __toStr(m->m_record));
 		}
 	}
 
@@ -145,14 +145,9 @@ private:
 		for (size_t i = 0; i < record.m_ips.size(); ++i)
 		{
 			const Ip& ip = record.m_ips[i];
-			if (ip.m_type == EIpType_v4)
-			{
-				str = str + "ipv4=" + StringUtil::toString((uint8_t*)&ip.m_value, 4) + ", ";
-			}
-			else
-			{
-				str = str + "ipv6=" + StringUtil::toString((uint8_t*)&ip.m_value, 16) + ", ";
-			}
+			std::string ip_str;
+			SocketUtil::ipToStr(ip, &ip_str);
+			str = str + "ip=" + ip_str + ", ";
 		}
 		return str;
 	}
