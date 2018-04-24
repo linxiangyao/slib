@@ -52,7 +52,6 @@
     <ClInclude Include="..\..\..\src\network\client\clientNetwork.h" />
     <ClInclude Include="..\..\..\src\network\client\clientNetSpeedTester.h" />
     <ClInclude Include="..\..\..\src\network\client\clientNetworkLib.h" />
-    <ClInclude Include="..\..\..\src\network\client\rawClientNetwork.h" />
     <ClInclude Include="..\..\..\src\network\client\simpleClientNetworkConsoleApp.h" />
     <ClInclude Include="..\..\..\src\network\comm\networkComm.h" />
     <ClInclude Include="..\..\..\src\network\networkLib.h" />
@@ -95,7 +94,6 @@
     <ClCompile Include="..\..\..\src\log\logComm.cpp" />
     <ClCompile Include="..\..\..\src\network\client\clientNetwork.cpp" />
     <ClCompile Include="..\..\..\src\network\client\clientNetSpeedTester.cpp" />
-    <ClCompile Include="..\..\..\src\network\client\rawClientNetwork.cpp" />
     <ClCompile Include="..\..\..\src\network\packer\simpleTcpPacker.cpp" />
     <ClCompile Include="..\..\..\src\network\server\serverNetwork.cpp" />
     <ClCompile Include="..\..\..\src\socket\dnsResolver.cpp" />

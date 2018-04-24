@@ -10,10 +10,10 @@ SCLIENT_NAMESPACE_BEGIN
 class SimpleClientNetworkConsoleLogic : public IConsoleAppLogic, public ClientNetwork::ICallback
 {
 public:
-	void init(const std::string& svr_ip, uint32_t svr_port, const std::map<uint32_t, ClientCgiInfo>& cgi_infos, ClientNetwork::IUnpacker* unpacker)
+	void init(const std::string& svr_ip_or_name, uint32_t svr_port, const std::map<uint32_t, ClientCgiInfo>& cgi_infos, ClientNetwork::IUnpacker* unpacker)
 	{
 		m_cgi_infos = cgi_infos;
-		m_svr_ip = svr_ip;
+		m_svr_ip_or_name = svr_ip_or_name;
 		m_svr_port = svr_port;
 		m_unpacker = unpacker;
 	}
@@ -43,7 +43,7 @@ protected:
 		// network
 		{
 			ClientNetwork::SvrInfo svr_info;
-			svr_info.m_svr_ip_or_name = m_svr_ip;
+			svr_info.m_svr_ip_or_name = m_svr_ip_or_name;
 			svr_info.m_svr_port = m_svr_port;
 			ClientNetwork::InitParam param;
 			param.m_unpacker = m_unpacker;
@@ -101,7 +101,7 @@ private:
 	IConsoleAppApi* m_console_api;
 	ITcpSocketCallbackApi* m_sapi;
 	ClientNetwork* m_network;
-	std::string m_svr_ip;
+	std::string m_svr_ip_or_name;
 	uint32_t m_svr_port;
 	std::map<uint32_t, ClientCgiInfo> m_cgi_infos;
 	ClientNetwork::IUnpacker* m_unpacker;
@@ -167,7 +167,7 @@ protected:
 	{
 	public:
 		MessageLooper * m_looper;
-		std::string m_svr_ip;
+		std::string m_svr_ip_or_name;
 		uint32_t m_svr_port;
 		std::map<uint32_t, ClientCgiInfo> m_cgi_infos;
 	};
@@ -252,7 +252,7 @@ private:
 		// network
 		{
 			ClientNetwork::SvrInfo svr_info;
-			svr_info.m_svr_ip_or_name = m_init_param.m_svr_ip;
+			svr_info.m_svr_ip_or_name = m_init_param.m_svr_ip_or_name;
 			svr_info.m_svr_port = m_init_param.m_svr_port;
 			ClientNetwork::InitParam param;
 			param.m_unpacker = m_packer;
