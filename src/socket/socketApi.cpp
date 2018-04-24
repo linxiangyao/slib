@@ -6,17 +6,35 @@ S_NAMESPACE_BEGIN
 // SocketUtil ------------------------------------------------------------------------
 bool SocketUtil::bindAndListen(socket_t s, const std::string& svr_ip_or_name, int svr_port)
 {
+	// get ip
 	std::vector<Ip> ips;
 	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &ips))
 	{
-		slog_e("SocketUtil::bindAndListen fail to getIpByName!");
+		slog_e("SocketUtil::bindAndListen fail to getIpByName.");
 		return false;
 	}
+	if (ips.size() == 0 || ips[0].m_type == EIpType_none)
+	{
+		slog_e("SocketUtil::bindAndListen fail, ips.size() == 0 || ips[0].m_type == EIpType_none.");
+		return false;
+	}
+	const Ip& ip = ips[0];
 
-	in_addr svr_ip = ips[0].m_ip_value.m_v4;
-
-	struct sockaddr_in server_addr;
-	SocketUtil::initAddr(&server_addr, svr_ip, svr_port);
+	// init addr
+	struct sockaddr* addr = nullptr;
+	int addr_len = 0;
+	struct sockaddr_in addr_v4;
+	struct sockaddr_in6 addr_v6;
+	if(ip.m_type == EIpType_v4)
+	{
+		SocketUtil::__initAddrV4(&addr_v4, ip.m_value.m_v4, svr_port);
+		addr_len = sizeof(struct sockaddr_in);
+	}
+	else
+	{
+		SocketUtil::__initAddrV6(&addr_v6, ip.m_value.m_v6, svr_port);
+		addr_len = sizeof(struct sockaddr_in6);
+	}
 
 	int enable = 1;
 	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable)) != 0)
@@ -25,7 +43,7 @@ bool SocketUtil::bindAndListen(socket_t s, const std::string& svr_ip_or_name, in
 		return false;
 	}
 
-	if (bind(s, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)) < 0)
+	if (bind(s, addr, addr_len) < 0)
 	{
 		slog_e("SocketUtil::bindAndListen fail to bind! error code : %d", getErr());
 		return false;
@@ -70,18 +88,38 @@ bool SocketUtil::accept(socket_t svr_accept_socket, socket_t* svr_trans_socket)
 
 bool SocketUtil::connect(socket_t client_socket, const std::string& svr_ip_or_name, int svr_port)
 {
+	// get ip
 	std::vector<Ip> ips;
 	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &ips))
 	{
-		slog_e("connect fail to getIpByName!");
+		slog_e("SocketUtil::connect fail to getIpByName.");
 		return false;
 	}
-	in_addr svr_ip = ips[0].m_ip_value.m_v4;
+	if (ips.size() == 0 || ips[0].m_type == EIpType_none)
+	{
+		slog_e("SocketUtil::connect fail, ips.size() == 0 || ips[0].m_type == EIpType_none.");
+		return false;
+	}
+	const Ip& ip = ips[0];
 
-	struct sockaddr_in server_address;
-	SocketUtil::initAddr(&server_address, svr_ip, svr_port);
+	// init addr
+	struct sockaddr* addr = nullptr;
+	int addr_len = 0;
+	struct sockaddr_in addr_v4;
+	struct sockaddr_in6 addr_v6;
 
-	if (::connect(client_socket, (sockaddr*)&server_address, sizeof(server_address)) < 0)
+	if (ip.m_type == EIpType_v4)
+	{
+		SocketUtil::__initAddrV4(&addr_v4, ip.m_value.m_v4, svr_port);
+		addr_len = sizeof(struct sockaddr_in);
+	}
+	else
+	{
+		SocketUtil::__initAddrV6(&addr_v6, ip.m_value.m_v6, svr_port);
+		addr_len = sizeof(struct sockaddr_in6);
+	}
+
+	if (::connect(client_socket, addr, addr_len) < 0)
 	{
 		int err_code = getErr();
 #ifdef S_OS_WIN
@@ -124,10 +162,10 @@ bool SocketUtil::getIpByName(const char* name, std::vector<Ip>* ips)
 	if (name == nullptr)
 		return false;
 
-	in_addr ip_v4;
-	if (strToIp(name, &ip_v4))
+	Ip ip;
+	if (strToIp(name, &ip))
 	{
-		ips->push_back(Ip(ip_v4));
+		ips->push_back(ip);
 		return true;
 	}
 
@@ -167,9 +205,20 @@ bool SocketUtil::getIpByName(const char* name, std::vector<Ip>* ips)
 	return true;
 }
 
-bool SocketUtil::ipToStr(in_addr ip_v4, std::string* ip_str)
+bool SocketUtil::ipToStr(Ip ip, std::string * ip_str)
 {
+	if (ip.m_type == EIpType_v4)
+		return ipv4ToStr(ip.m_value.m_v4, ip_str);
+	else
+		return ipv6ToStr(ip.m_value.m_v6, ip_str);
+}
+
+bool SocketUtil::ipv4ToStr(in_addr ip_v4, std::string* ip_str)
+{
+	if (ip_str == nullptr)
+		return false;
 	*ip_str = "";
+
 	char buf[100];
 	if (inet_ntop(AF_INET, &ip_v4, buf, 100) == NULL)
 		return false;
@@ -178,17 +227,45 @@ bool SocketUtil::ipToStr(in_addr ip_v4, std::string* ip_str)
 	return true;
 }
 
-bool SocketUtil::strToIp(const std::string& ip_str, in_addr* ip_v4)
+bool SocketUtil::ipv6ToStr(in6_addr ip_v6, std::string * ip_str)
+{
+	if (ip_str == nullptr)
+		return false;
+	*ip_str = "";
+
+	char buf[100];
+	if (inet_ntop(AF_INET6, &ip_v6, buf, 100) == NULL)
+		return false;
+
+	*ip_str = buf;
+	return true;
+}
+
+bool SocketUtil::strToIp(const std::string & ip_str, Ip * ip)
+{ 
+	if (strToIpv4(ip_str, &ip->m_value.m_v4))
+	{
+		ip->m_type = EIpType_v4;
+		return true;
+	}
+
+	if (strToIpv6(ip_str, &ip->m_value.m_v6))
+	{
+		ip->m_type = EIpType_v6;
+		return true;
+	}
+
+	return false;
+}
+
+bool SocketUtil::strToIpv4(const std::string& ip_str, in_addr* ip_v4)
 {
 	return inet_pton(AF_INET, ip_str.c_str(), ip_v4) == 1;
 }
 
-void SocketUtil::initAddr(struct sockaddr_in* addr, in_addr ip, int port)
+bool SocketUtil::strToIpv6(const std::string & ip_str, in6_addr * ip_v6)
 {
-	memset(addr, 0, sizeof(sockaddr_in));
-	addr->sin_family = AF_INET;
-	addr->sin_addr = ip;
-	addr->sin_port = htons((short)port);
+	return inet_pton(AF_INET6, ip_str.c_str(), ip_v6) == 1;
 }
 
 bool SocketUtil::isValidSocketId(socket_id_t s)
@@ -216,6 +293,23 @@ uint32_t SocketUtil::nToHl(uint32_t l)
 	return ntohl(l);
 }
 
+
+
+void SocketUtil::__initAddrV4(struct sockaddr_in* addr, in_addr ip, int port)
+{
+	memset(addr, 0, sizeof(sockaddr_in));
+	addr->sin_family = AF_INET;
+	addr->sin_addr = ip;
+	addr->sin_port = htons((short)port);
+}
+
+void SocketUtil::__initAddrV6(sockaddr_in6 * addr, in6_addr ip, int port)
+{
+	memset(addr, 0, sizeof(sockaddr_in6));
+	addr->sin6_family = AF_INET;
+	addr->sin6_addr = ip;
+	addr->sin6_port = htons((short)port);
+}
 
 
 

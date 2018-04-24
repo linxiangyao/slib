@@ -69,6 +69,7 @@ public:
 
 enum EIpType
 {
+	EIpType_none,
 	EIpType_v4,
 	EIpType_v6,
 };
@@ -76,15 +77,16 @@ enum EIpType
 class Ip
 {
 public:
-	Ip(in_addr v4) { m_ip_type = EIpType_v4; m_ip_value.m_v4 = v4; }
-	Ip(in6_addr v6) { m_ip_type = EIpType_v6; m_ip_value.m_v6 = v6; }
+	Ip() { m_type = EIpType_none; }
+	Ip(in_addr v4) { m_type = EIpType_v4; m_value.m_v4 = v4; }
+	Ip(in6_addr v6) { m_type = EIpType_v6; m_value.m_v6 = v6; }
 
-	EIpType m_ip_type;
+	EIpType m_type;
 	union
 	{
 		in_addr m_v4;
 		in6_addr m_v6;
-	} m_ip_value;
+	} m_value;
 };
 
 

@@ -131,13 +131,13 @@ private:
 		for (size_t i = 0; i < record.m_ips.size(); ++i)
 		{
 			const Ip& ip = record.m_ips[i];
-			if (ip.m_ip_type == EIpType_v4)
+			if (ip.m_type == EIpType_v4)
 			{
-				str = str + "ipv4=" + StringUtil::toString((uint8_t*)&ip.m_ip_value, 4) + ", ";
+				str = str + "ipv4=" + StringUtil::toString((uint8_t*)&ip.m_value, 4) + ", ";
 			}
 			else
 			{
-				str = str + "ipv6=" + StringUtil::toString((uint8_t*)&ip.m_ip_value, 16) + ", ";
+				str = str + "ipv6=" + StringUtil::toString((uint8_t*)&ip.m_value, 16) + ", ";
 			}
 		}
 		return str;
