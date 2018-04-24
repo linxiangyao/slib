@@ -239,8 +239,8 @@ public:
     static bool ipv4ToStr(in_addr ip_v4, std::string* ip_str);
 	static bool ipv6ToStr(in6_addr ip_v6, std::string* ip_str);
 	static bool strToIp(const std::string& ip_str, Ip* ip);
-    static bool strToIpv4(const std::string& ip_str, in_addr* ip_v4);
-	static bool strToIpv6(const std::string& ip_str, in6_addr* ip_v6);
+    static bool strToIpV4(const std::string& ip_str, in_addr* ip_v4);
+	static bool strToIpV6(const std::string& ip_str, in6_addr* ip_v6);
     static uint16_t hToNs(uint16_t s);
     static uint32_t hToNl(uint32_t l);
     static uint16_t nToHs(uint16_t s);

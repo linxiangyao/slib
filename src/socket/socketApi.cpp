@@ -216,13 +216,13 @@ bool SocketUtil::ipv6ToStr(in6_addr ip_v6, std::string * ip_str)
 
 bool SocketUtil::strToIp(const std::string & ip_str, Ip * ip)
 { 
-	if (strToIpv4(ip_str, &ip->m_value.m_v4))
+	if (strToIpV4(ip_str, &ip->m_value.m_v4))
 	{
 		ip->m_type = EIpType_v4;
 		return true;
 	}
 
-	if (strToIpv6(ip_str, &ip->m_value.m_v6))
+	if (strToIpV6(ip_str, &ip->m_value.m_v6))
 	{
 		ip->m_type = EIpType_v6;
 		return true;
@@ -231,12 +231,12 @@ bool SocketUtil::strToIp(const std::string & ip_str, Ip * ip)
 	return false;
 }
 
-bool SocketUtil::strToIpv4(const std::string& ip_str, in_addr* ip_v4)
+bool SocketUtil::strToIpV4(const std::string& ip_str, in_addr* ip_v4)
 {
 	return inet_pton(AF_INET, ip_str.c_str(), ip_v4) == 1;
 }
 
-bool SocketUtil::strToIpv6(const std::string & ip_str, in6_addr * ip_v6)
+bool SocketUtil::strToIpV6(const std::string & ip_str, in6_addr * ip_v6)
 {
 	return inet_pton(AF_INET6, ip_str.c_str(), ip_v6) == 1;
 }
