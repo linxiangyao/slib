@@ -1296,9 +1296,9 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
 		slog_e("startClientSocket fail to find ctx, client_sid=%0", client_sid);
 		return false;
 	}
-	if (ctx->m_socket != 0)
+	if (ctx->m_socket != INVALID_SOCKET)
 	{
-		slog_d("startClientSocket ctx->m_socket != 0, maybe already start? ignore. client_sid=%0", client_sid);
+		slog_d("startClientSocket ctx->m_socket != INVALID_SOCKET, maybe already start? ignore. client_sid=%0", client_sid);
 		return true;
 	}
 
