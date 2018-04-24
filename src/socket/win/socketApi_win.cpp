@@ -245,7 +245,7 @@ bool TcpSocketCallbackApi::createClientSocket(socket_id_t* client_sid, const Cre
         return false;
     *client_sid = 0;
 
-	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip_or_name.size() == 0 || param.m_svr_port == 0)
+	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip.size() == 0 || param.m_svr_port == 0)
 	{
 		slog_e("createClientSocket fail, param error");
 		return false;
@@ -302,7 +302,7 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
         
 	ctx->m_socket = s;
 
-    __ClientRun* r = new __ClientRun(this, m_work_looper, ctx->m_sid, ctx->m_socket, ctx->m_client_param.m_svr_ip_or_name, ctx->m_client_param.m_svr_port);
+    __ClientRun* r = new __ClientRun(this, m_work_looper, ctx->m_sid, ctx->m_socket, ctx->m_client_param.m_svr_ip, ctx->m_client_param.m_svr_port);
     Thread* t = new Thread(r);
 	if (!t->start())
 	{
@@ -362,7 +362,7 @@ std::string TcpSocketCallbackApi::getClientSocketSvrIp(socket_id_t client_sid)
 	__SocketCtx* ctx = __getClientCtxById(client_sid);
 	if (ctx == NULL)
 		return "";
-	return ctx->m_client_param.m_svr_ip_or_name;
+	return ctx->m_client_param.m_svr_ip;
 }
 
 uint32_t TcpSocketCallbackApi::getClientSocketSvrPort(socket_id_t client_sid)
@@ -382,7 +382,7 @@ bool TcpSocketCallbackApi::createSvrListenSocket(socket_id_t* svr_listen_sid, co
         return false;
     *svr_listen_sid = 0;
 
-	if (param.m_callback_looper == nullptr || param.m_svr_ip_or_name.size() == 0 || param.m_svr_port == 0)
+	if (param.m_callback_looper == nullptr || param.m_svr_ip.size() == 0 || param.m_svr_port == 0)
 	{
 		slog_e("createSvrListenSocket fail, param err");
 		return false;
@@ -437,7 +437,7 @@ bool TcpSocketCallbackApi::startSvrListenSocket(socket_id_t svr_listen_sid)
 	}
 	ctx->m_socket = s;
 
-	__SvrListenRun* r = new __SvrListenRun(m_work_looper, this, ctx->m_socket, ctx->m_sid, ctx->m_svr_param.m_svr_ip_or_name, ctx->m_svr_param.m_svr_port);
+	__SvrListenRun* r = new __SvrListenRun(m_work_looper, this, ctx->m_socket, ctx->m_sid, ctx->m_svr_param.m_svr_ip, ctx->m_svr_param.m_svr_port);
 	Thread* t = new Thread(r);
 	if (!t->start())
 	{
@@ -503,7 +503,7 @@ std::string TcpSocketCallbackApi::getSvrListenSocketIp(socket_id_t svr_listen_si
 	__SocketCtx* ctx = __getClientCtxById(svr_listen_sid);
 	if (ctx == NULL)
 		return "";
-	return ctx->m_svr_param.m_svr_ip_or_name;
+	return ctx->m_svr_param.m_svr_ip;
 }
 
 uint32_t TcpSocketCallbackApi::getSvrListenSocketPort(socket_id_t svr_listen_sid)
@@ -865,13 +865,13 @@ Thread* TcpSocketCallbackApi::__getThreadById(socket_id_t sid)
 
 
 // __ClientRun --
-TcpSocketCallbackApi::__ClientRun::__ClientRun(void* msg_target, MessageLooper* notify_looper, socket_id_t sid, socket_t s, const std::string& svr_ip_or_name, int svr_port)
+TcpSocketCallbackApi::__ClientRun::__ClientRun(void* msg_target, MessageLooper* notify_looper, socket_id_t sid, socket_t s, const std::string& svr_ip, int svr_port)
 {
     m_socket = s;
     m_sid = sid;
 	m_msg_target = msg_target;
 	m_callback_looper = notify_looper;
-    m_svr_ip_or_name = svr_ip_or_name;
+    m_svr_ip = svr_ip;
     m_svr_port = svr_port;
 
     m_is_exit = false;
@@ -921,7 +921,7 @@ void TcpSocketCallbackApi::__ClientRun::__run()
 	if (m_break_event == WSA_INVALID_EVENT)
 		return;
 
-    if (!SocketUtil::connect(m_socket, m_svr_ip_or_name, m_svr_port))
+    if (!SocketUtil::connect(m_socket, m_svr_ip, m_svr_port))
         return;
 
 	Message* msg = new Message();
@@ -1089,13 +1089,13 @@ void TcpSocketCallbackApi::__ClientRun::__clearSession()
 
 
 // __SvrListenRun --
-TcpSocketCallbackApi::__SvrListenRun::__SvrListenRun(MessageLooper* notify_looper, void* notify_target, socket_t s, socket_id_t sid, const std::string& svr_ip_or_name, int svr_port)
+TcpSocketCallbackApi::__SvrListenRun::__SvrListenRun(MessageLooper* notify_looper, void* notify_target, socket_t s, socket_id_t sid, const std::string& svr_ip, int svr_port)
 {
 	m_callback_looper = notify_looper;
 	m_notify_target = notify_target;
     m_socket = s;
     m_sid = sid;
-    m_svr_ip_or_name = svr_ip_or_name;
+    m_svr_ip = svr_ip;
     m_svr_port = svr_port;
 	m_is_exit = false;
 }
@@ -1141,7 +1141,7 @@ void TcpSocketCallbackApi::__SvrListenRun::__run()
 	__postMsgToTarget(msg);
 	//slog_d("__postMsgToTarget EMsgType_svrListenSocketStarted end");
 
-    if (!SocketUtil::bindAndListen(m_socket, m_svr_ip_or_name, m_svr_port))
+    if (!SocketUtil::bindAndListen(m_socket, m_svr_ip, m_svr_port))
         return;
 
     while (true)

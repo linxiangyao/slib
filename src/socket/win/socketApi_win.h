@@ -104,7 +104,7 @@ private:
         socket_id_t m_sid;
         SOCKET m_socket;
         MessageLooper* m_callback_looper;
-        std::string m_svr_ip_or_name;
+        std::string m_svr_ip;
         int m_svr_port;
 
         WSAEVENT m_break_event;
@@ -129,7 +129,7 @@ private:
 		std::mutex m_mutex;
         SOCKET m_socket;
         socket_id_t m_sid;
-        std::string m_svr_ip_or_name;
+        std::string m_svr_ip;
         int m_svr_port;
 		MessageLooper* m_callback_looper;
 		void* m_notify_target;

@@ -53,7 +53,7 @@ bool ClientNetSpeedTester::init(const InitParam& param)
 			ITcpSocketCallbackApi::CreateClientSocketParam param;
 			param.m_callback_looper = m_init_param.m_work_looper;
 			param.m_callback_target = this;
-			param.m_svr_ip_or_name = c->m_svr_info.m_svr_ip_or_name;
+			param.m_svr_ip = c->m_svr_info.m_svr_ip;
 			param.m_svr_port = c->m_svr_info.m_svr_port;
 			if (!m_init_param.m_sapi->createClientSocket(&c->m_sid, param))
 			{
@@ -132,7 +132,7 @@ void ClientNetSpeedTester::__onMessage_clientConnected(const ITcpSocketCallbackA
 
 	Message* m = new Message();
 	m->m_msg_type = EMsgType_onOneSvrResultUpdate;
-	m->m_args.setString("svr_ip_or_name", ctx->m_svr_info.m_svr_ip_or_name);
+	m->m_args.setString("svr_ip", ctx->m_svr_info.m_svr_ip);
 	m->m_args.setUint32("svr_port", ctx->m_svr_info.m_svr_port);
 	m->m_args.setUint64("send_bytes_per_second", ctx->m_send_bytes_per_second);
 	m->m_args.setUint64("recv_bytes_per_second", ctx->m_recv_bytes_per_second);
@@ -152,7 +152,7 @@ void ClientNetSpeedTester::__onMessage_clientDisconnected(const ITcpSocketCallba
 
 	Message* m = new Message();
 	m->m_msg_type = EMsgType_onOneSvrResultUpdate;
-	m->m_args.setString("svr_ip_or_name", ctx->m_svr_info.m_svr_ip_or_name);
+	m->m_args.setString("svr_ip", ctx->m_svr_info.m_svr_ip);
 	m->m_args.setUint32("svr_port", ctx->m_svr_info.m_svr_port);
 	m->m_args.setUint64("send_bytes_per_second", ctx->m_send_bytes_per_second);
 	m->m_args.setUint64("recv_bytes_per_second", ctx->m_recv_bytes_per_second);

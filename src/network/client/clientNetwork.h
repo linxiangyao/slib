@@ -172,8 +172,11 @@ public:
 	public:
 		InitParam()
 		{ 
-			m_work_looper = NULL;
-			m_sapi = NULL;
+			m_work_looper = nullptr;
+			m_callback = nullptr;
+			m_sapi = nullptr;
+			m_unpacker = nullptr;
+			m_dns_resolver = nullptr;
 			m_connect_interval_mss.push_back(1);
 			m_connect_interval_mss.push_back(1*1000);
 			m_connect_interval_mss.push_back(2 * 1000);
@@ -181,15 +184,15 @@ public:
 			m_connect_interval_mss.push_back(4 * 1000);
 			m_connect_interval_mss.push_back(5 * 1000);
 			m_is_repeat_last_connect_interval_ms = true;
-			m_callback = nullptr;
 			m_max_pack_count = 1000;
 		}
 
 		MessageLooper* m_work_looper;
 		ICallback* m_callback;
+		ITcpSocketCallbackApi* m_sapi;
+		DnsResolver* m_dns_resolver;
 		std::vector<SvrInfo> m_svr_infos;
 		std::map<uint32_t, ClientCgiInfo> m_send_cmd_type_to_cgi_info_map;
-		ITcpSocketCallbackApi* m_sapi;
 		IUnpacker* m_unpacker;
 		std::vector<int32_t> m_connect_interval_mss;
 		bool m_is_repeat_last_connect_interval_ms;
@@ -236,6 +239,16 @@ private:
 		__EConnectState_connecting,
 		__EConnectState_connected,
 		__EConnectState_disconnected,
+	};
+
+	class __SvrInfo
+	{
+	public:
+		__SvrInfo() { m_is_dns_resolved = false; m_port = 0; }
+		std::string m_name;
+		uint32_t m_port;
+		std::vector<Ip> m_ip;
+		bool m_is_dns_resolved;
 	};
 
 	class __CgiCtx
@@ -318,6 +331,9 @@ private:
 	InitParam m_init_param;
 	bool m_is_running;
 	uint64_t m_timer_id;
+
+	DnsResolver* m_dns_resolver;
+	std::vector<__SvrInfo> m_svr_infos;
 
 	ClientNetSpeedTester* m_speed_tester;
 	std::map<std::string, ClientNetSpeedTester::TestResult> m_speed_test_results;

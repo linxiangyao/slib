@@ -161,7 +161,7 @@ public:
 
 		__Msg_cmd_connect* msg = new __Msg_cmd_connect();
 		msg->m_socket = s;
-		msg->m_svr_ip_or_name = svr_ip;
+		msg->m_svr_ip = svr_ip;
 		msg->m_svr_port = svr_port;
 		m_msgs.push_back(msg);
 
@@ -246,7 +246,7 @@ private:
 	public:
 		__Msg_cmd_connect() { m_msg_type = __EMsgType_cmd_connect; m_svr_port = 0; }
 		~__Msg_cmd_connect() {}
-		std::string m_svr_ip_or_name;
+		std::string m_svr_ip;
 		uint32_t m_svr_port;
 	};
 
@@ -403,8 +403,8 @@ private:
 					continue;
 				}
 
-				slog_d("connect socket=%0, svrIp=%1, svrPort=%2", ctx->m_socket, msg->m_svr_ip_or_name, msg->m_svr_port);
-				if (!SocketUtil::connect(ctx->m_socket, msg->m_svr_ip_or_name, msg->m_svr_port))
+				slog_d("connect socket=%0, svrIp=%1, svrPort=%2", ctx->m_socket, msg->m_svr_ip, msg->m_svr_port);
+				if (!SocketUtil::connect(ctx->m_socket, msg->m_svr_ip, msg->m_svr_port))
 				{
 					slog_e("fail to connect");
 					__releaseSocketCtx(ctx);
@@ -1231,7 +1231,7 @@ bool TcpSocketCallbackApi::createClientSocket(socket_id_t* client_sid, const Cre
         return false;
 	*client_sid = 0;
 
-	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip_or_name.size() == 0 || param.m_svr_port == 0)
+	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip.size() == 0 || param.m_svr_port == 0)
 	{
 		slog_e("createClientSocket fail, param error");
 		return false;
@@ -1312,7 +1312,7 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
 	slog_d("startClientSocket ok, client_sid=%0, client_socket=%1", client_sid, ctx->m_socket);
 
 	__ClientThreadRun* run = (__ClientThreadRun*)m_client_thread->getRun();
-	run->postMsg_cmdConnectSvr(ctx->m_socket, ctx->m_client_param.m_svr_ip_or_name, ctx->m_client_param.m_svr_port);
+	run->postMsg_cmdConnectSvr(ctx->m_socket, ctx->m_client_param.m_svr_ip, ctx->m_client_param.m_svr_port);
 	
 	return true;
 }
@@ -1346,7 +1346,7 @@ std::string TcpSocketCallbackApi::getClientSocketSvrIp(socket_id_t client_sid)
 	__SocketCtx* ctx = __getClientCtxById(client_sid);
 	if (ctx == NULL)
 		return "";
-	return ctx->m_client_param.m_svr_ip_or_name;
+	return ctx->m_client_param.m_svr_ip;
 }
 
 uint32_t TcpSocketCallbackApi::getClientSocketSvrPort(socket_id_t client_sid)
@@ -1424,7 +1424,7 @@ bool TcpSocketCallbackApi::startSvrListenSocket(socket_id_t svr_listen_sid)
 	slog_d("startSvrListenSocket ok, svr_listen_sid=%0, svr_listen_socket=%1", svr_listen_sid, ctx->m_socket);
 
 	__SvrThreadRun* run = (__SvrThreadRun*)m_svr_thread->getRun();
-	run->postMsg_cmdStartListenSocket(ctx->m_socket, ctx->m_svr_param.m_svr_ip_or_name, ctx->m_svr_param.m_svr_port);
+	run->postMsg_cmdStartListenSocket(ctx->m_socket, ctx->m_svr_param.m_svr_ip, ctx->m_svr_param.m_svr_port);
 	return true;
 }
 
@@ -1465,7 +1465,7 @@ std::string TcpSocketCallbackApi::getSvrListenSocketIp(socket_id_t svr_listen_si
 	__SocketCtx* ctx = __getClientCtxById(svr_listen_sid);
 	if (ctx == NULL)
 		return "";
-	return ctx->m_svr_param.m_svr_ip_or_name;
+	return ctx->m_svr_param.m_svr_ip;
 }
 
 uint32_t TcpSocketCallbackApi::getSvrListenSocketPort(socket_id_t svr_listen_sid)

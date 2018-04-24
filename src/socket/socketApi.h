@@ -87,7 +87,7 @@ public:
 
         MessageLooper* m_callback_looper;
 		void* m_callback_target;
-        std::string m_svr_ip_or_name;
+        std::string m_svr_ip;
         uint32_t m_svr_port;
     };
 
@@ -98,7 +98,7 @@ public:
 
 		MessageLooper* m_callback_looper;
 		void* m_callback_target;
-        std::string m_svr_ip_or_name;
+        std::string m_svr_ip;
 		uint32_t m_svr_port;
     };
 

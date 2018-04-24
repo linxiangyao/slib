@@ -16,14 +16,18 @@ ClientNetwork::ClientNetwork()
 
 	m_speed_tester = NULL;
 	m_is_testing_speed = false;
+
+	m_dns_resolver = nullptr;
 }
 
 ClientNetwork::~ClientNetwork()
 {
 	slog_d("delete ClientNetwork=%0", (uint64_t)this);
 	stop();
+	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_sapi->releaseClientSocket(m_client_ctx.m_sid);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
+	delete m_dns_resolver;
 }
 
 bool ClientNetwork::init(const InitParam& param)
@@ -36,9 +40,19 @@ bool ClientNetwork::init(const InitParam& param)
 		return false;
 	}
 	m_init_param = param;
+
 	m_connect_interval_mss = m_init_param.m_connect_interval_mss;
 	m_timer_id = m_init_param.m_work_looper->createTimer(NULL);
 	m_client_ctx.m_init_param = &m_init_param;
+	
+	if (m_init_param.m_dns_resolver == nullptr)
+	{
+		m_dns_resolver = new DnsResolver();
+		if (!m_dns_resolver->init(m_init_param.m_work_looper))
+			return false;
+		m_init_param.m_dns_resolver = m_dns_resolver;
+	}
+	m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
 
 	return true;
 }
@@ -67,7 +81,7 @@ bool ClientNetwork::start()
 		for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
 		{
 			ClientNetSpeedTester::SvrInfo svr_info;
-			svr_info.m_svr_ip_or_name = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
+			svr_info.m_svr_ip = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
 			svr_info.m_svr_port = m_init_param.m_svr_infos[i].m_svr_port;
 			svr_info.m_send_count = 0;
 			svr_infos.push_back(svr_info);
@@ -397,7 +411,7 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 	ITcpSocketCallbackApi::CreateClientSocketParam param;
 	param.m_callback_looper = m_init_param.m_work_looper;
 	param.m_callback_target = this;
-	param.m_svr_ip_or_name = svr_info->m_svr_ip_or_name;
+	param.m_svr_ip = svr_info->m_svr_ip_or_name;
 	param.m_svr_port = svr_info->m_svr_port;
 	if (!m_init_param.m_sapi->createClientSocket(&m_client_ctx.m_sid, param))
 		return;
