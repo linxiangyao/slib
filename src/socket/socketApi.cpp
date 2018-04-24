@@ -60,7 +60,7 @@ bool SocketUtil::accept(socket_t svr_accept_socket, socket_t* svr_trans_socket)
 		if (addr->sa_family == AF_INET6)
 			remote_port = ntohs(((sockaddr_in6*)addr)->sin6_port);
 
-		slog_d("accept remote_ip=%0, remote_port=%1", remote_ip_str, remote_port);
+		slog_d("accept tran_socket=%0, remote_ip=%1, remote_port=%2", *svr_trans_socket, remote_ip_str, remote_port);
 	}
 
 	return true;
