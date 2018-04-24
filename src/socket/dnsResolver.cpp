@@ -103,8 +103,9 @@ DnsResolver::~DnsResolver()
 {
 	ScopeMutex _l(m_mutex);
 	m_env_loop->removeMsgHandler(this);
-	delete m_env_thread;
+
 	delete_and_erase_collection_elements(&m_resolve_threads);
+	delete m_env_thread;
 }
 
 bool DnsResolver::init(MessageLooper * work_loop) {
