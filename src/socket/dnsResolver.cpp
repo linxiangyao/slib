@@ -95,35 +95,71 @@ private:
 
 DnsResolver::DnsResolver()
 {
+	m_env_loop = nullptr;
+	m_env_thread = nullptr;
 }
 
 DnsResolver::~DnsResolver() 
 {
+	ScopeMutex _l(m_mutex);
 	m_env_loop->removeMsgHandler(this);
-	delete_and_erase_collection_elements(&m_threads);
+	delete m_env_thread;
+	delete_and_erase_collection_elements(&m_resolve_threads);
 }
 
-bool DnsResolver::init(MessageLooper * env_loop, ICallback* callback) {
-	m_env_loop = env_loop;
-	m_callback = callback;
+bool DnsResolver::init(MessageLooper * work_loop) {
+	ScopeMutex _l(m_mutex);
+	if (work_loop == nullptr)
+	{
+		m_env_thread = new MessageLoopThread(nullptr, false);
+		if (!m_env_thread->start())
+			return false;
+		m_env_loop = m_env_thread->getLooper();
+	}
+	else
+	{
+		m_env_loop = work_loop;
+	}
 	m_env_loop->addMsgHandler(this);
 	return true;
 }
 
+void DnsResolver::stop()
+{
+	ScopeMutex _l(m_mutex);
+	delete_and_erase_collection_elements(&m_resolve_threads);
+}
+
+bool DnsResolver::addNotifyLooper(MessageLooper * notify_loop)
+{
+	ScopeMutex _l(m_mutex);
+	if (is_vector_contain_element(m_notify_loops, notify_loop))
+		return true;
+	m_notify_loops.push_back(notify_loop);
+	return false;
+}
+
+void DnsResolver::removeNotifyLooper(MessageLooper * notify_loop)
+{
+	ScopeMutex _l(m_mutex);
+	erase_vector_element_by_value(&m_notify_loops, notify_loop);
+}
+
 bool DnsResolver::getIpByName(const std::string& name, DnsRecord* record)
 {
+	ScopeMutex _l(m_mutex);
 	auto it = m_records.find(name);
 	if (it == m_records.end())
 	{
 		in_addr ip_v4;
-		if (__strToIp(name, &ip_v4))
+		if (SocketUtil::strToIpV4(name, &ip_v4))
 		{
 			record->m_ips.push_back(Ip(ip_v4));
 			return true;
 		}
 
 		in6_addr ip_v6;
-		if(__strToIp(name, &ip_v6))
+		if(SocketUtil::strToIpV6(name, &ip_v6))
 		{
 			record->m_ips.push_back(Ip(ip_v6));
 			return true;
@@ -138,6 +174,7 @@ bool DnsResolver::getIpByName(const std::string& name, DnsRecord* record)
 
 bool DnsResolver::startResolve(const std::string & name)
 {
+	ScopeMutex _l(m_mutex);
 	m_records.erase(name);
 
 	m_to_resolve_names.push_back(name);
@@ -147,6 +184,7 @@ bool DnsResolver::startResolve(const std::string & name)
 
 void DnsResolver::onMessage(Message * msg, bool * is_handled)
 {
+	ScopeMutex _l(m_mutex);
 	if (msg->m_target == this && msg->m_msg_type == MSG_TYPE_DnsResolver__WorkRun__resolveEnd)
 	{
 		*is_handled = true;
@@ -155,18 +193,14 @@ void DnsResolver::onMessage(Message * msg, bool * is_handled)
 		if (m->m_is_ok)
 		{
 			m_records[m->m_record.m_name] = m->m_record;
-			m_callback->onDnsResolver_resolveEnd(this, true, m_records[m->m_record.m_name]);
 		}
-		else
-		{
-			m_callback->onDnsResolver_resolveEnd(this, false, m->m_record);
-		}
+		__notifyResolveEnd(m->m_is_ok, m->m_record);
 
-		for (size_t i = 0; i < m_threads.size(); ++i)
+		for (size_t i = 0; i < m_resolve_threads.size(); ++i)
 		{
-			if (m_threads[i]->getRun() == m->m_sender)
+			if (m_resolve_threads[i]->getRun() == m->m_sender)
 			{
-				delete_and_erase_vector_element_by_index(&m_threads, (int)i);
+				delete_and_erase_vector_element_by_index(&m_resolve_threads, (int)i);
 				break;
 			}
 		}
@@ -179,25 +213,24 @@ void DnsResolver::__doResolve()
 {
 	if (m_to_resolve_names.size() == 0)
 		return;
-	if (m_threads.size() > 5)
+	if (m_resolve_threads.size() > 5)
 		return;
 
 	std::string name = m_to_resolve_names[0];
 	m_to_resolve_names.erase(m_to_resolve_names.begin() + 0);
 
 	Thread* t = new Thread(new __WorkRun(m_env_loop, this, name));
-	m_threads.push_back(t);
+	m_resolve_threads.push_back(t);
 	t->start();
 }
 
-bool DnsResolver::__strToIp(const std::string& str, in_addr * ip_v4)
+void DnsResolver::__notifyResolveEnd(bool is_ok, const DnsRecord & record)
 {
-	return inet_pton(AF_INET, str.c_str(), ip_v4) == 1;
-}
-
-bool DnsResolver::__strToIp(const std::string& str, in6_addr * ip_v6)
-{
-	return inet_pton(AF_INET6, str.c_str(), ip_v6) == 1;
+	for (size_t i = 0; i < m_notify_loops.size(); ++i)
+	{
+		Msg_ResolveEnd* msg = new Msg_ResolveEnd(this, is_ok, record);
+		m_notify_loops[i]->postMessage(msg);
+	}
 }
 
 

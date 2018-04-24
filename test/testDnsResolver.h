@@ -76,7 +76,7 @@ void __testDnsApi()
 }
 
 
-class __TestDnsResolverLogic : public IConsoleAppLogic, public DnsResolver::ICallback
+class __TestDnsResolverLogic : public IConsoleAppLogic
 {
 private:
 	virtual void onAppStartMsg(IConsoleAppApi * api) override
@@ -84,12 +84,17 @@ private:
 		m_api = api;
 
 		initSocketLib();
+
 		m_dns_resolver = new DnsResolver();
-		if (!m_dns_resolver->init(&m_api->getMessageLooper(), this))
+		//if (!m_dns_resolver->init())
+		if (!m_dns_resolver->init(&m_api->getMessageLooper()))
 		{
 			slog_e("fail to init");
 			return;
 		}
+		
+		m_dns_resolver->addNotifyLooper(&m_api->getMessageLooper());
+
 		if (!m_dns_resolver->startResolve("163.com"))
 		{
 			slog_e("fail to startResolve");
@@ -119,10 +124,19 @@ private:
 		slog_i("onAppStopMsg end");
 	}
 
-	virtual void onDnsResolver_resolveEnd(DnsResolver * resolver, bool is_ok, const DnsResolver::DnsRecord & record) override
+	virtual void onMessage(Message * msg, bool * is_handled) override
 	{
-		slog_i("is_ok=%0, record=%1", is_ok, __toStr(record));
+		if (msg->m_sender == m_dns_resolver && msg->m_msg_type == MSG_TYPE_DnsResolver_resolveEnd)
+		{
+			*is_handled = true;
+			DnsResolver::Msg_ResolveEnd* m = (DnsResolver::Msg_ResolveEnd*)msg;
+			slog_i("is_ok=%0, record=%1", m->m_is_ok, __toStr(m->m_record));
+		}
 	}
+
+
+
+
 
 	std::string __toStr(const DnsResolver::DnsRecord& record)
 	{
