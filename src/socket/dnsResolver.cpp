@@ -45,10 +45,11 @@ private:
 		addrinfo* addr_result = NULL;
 		if (getaddrinfo(m_name.c_str(), NULL, &addr_hint, &addr_result) != 0)
 		{
-			slog_e("fail to getaddrinfo %0", m_name);
+			slog_e("DnsResolver::__WorkRun::run fail to getaddrinfo %0", m_name);
 			__notify(false, record);
 			return;
 		}
+
 		for (addrinfo* a = addr_result; a != NULL; a = a->ai_next)
 		{
 			if (a->ai_family == AF_INET) 
@@ -58,7 +59,7 @@ private:
 
 				char ip_str[100];
 				if (inet_ntop(AF_INET, &ip_v4, ip_str, sizeof(ip_str)) != nullptr)
-					slog_d("%0 ip=%1", m_name, ip_str);
+					slog_d("resolve %0 ip=%1", m_name, ip_str);
 			}
 			else if (a->ai_family == AF_INET6)
 			{
@@ -67,7 +68,7 @@ private:
 
 				char ip_str[100];
 				if (inet_ntop(AF_INET6, &ip_v6, ip_str, sizeof(ip_str)) != nullptr)
-					slog_d("%0 ip=%1", m_name, ip_str);
+					slog_d("resolve %0 ip=%1", m_name, ip_str);
 			}
 		}
 
@@ -95,12 +96,14 @@ private:
 
 DnsResolver::DnsResolver()
 {
+	slog_d("new DnsResolver=%0", (uint64_t)this);
 	m_env_loop = nullptr;
 	m_env_thread = nullptr;
 }
 
 DnsResolver::~DnsResolver() 
 {
+	slog_d("delete DnsResolver=%0", (uint64_t)this);
 	ScopeMutex _l(m_mutex);
 	m_env_loop->removeMsgHandler(this);
 
@@ -108,13 +111,19 @@ DnsResolver::~DnsResolver()
 	delete m_env_thread;
 }
 
-bool DnsResolver::init(MessageLooper * work_loop) {
+bool DnsResolver::init(MessageLooper * work_loop) 
+{
+	slog_d("DnsResolver init");
 	ScopeMutex _l(m_mutex);
 	if (work_loop == nullptr)
 	{
 		m_env_thread = new MessageLoopThread(nullptr, false);
 		if (!m_env_thread->start())
+		{
+			slog_e("DnsResolver::init fail to m_env_thread->start");
 			return false;
+		}
+			
 		m_env_loop = m_env_thread->getLooper();
 	}
 	else
@@ -127,6 +136,7 @@ bool DnsResolver::init(MessageLooper * work_loop) {
 
 void DnsResolver::stop()
 {
+	slog_d("DnsResolver stop");
 	ScopeMutex _l(m_mutex);
 	delete_and_erase_collection_elements(&m_resolve_threads);
 }
