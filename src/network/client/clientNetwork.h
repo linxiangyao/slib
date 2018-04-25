@@ -14,6 +14,7 @@ auto retry send pack.
 provide timeout funtion.
 provide priority funtion.
 flow limity.
+dns
 network speed test, choice fastest svr.
 
 
@@ -241,16 +242,6 @@ private:
 		__EConnectState_disconnected,
 	};
 
-	class __SvrInfo
-	{
-	public:
-		__SvrInfo() { m_is_dns_resolved = false; m_port = 0; }
-		std::string m_name;
-		uint32_t m_port;
-		std::vector<Ip> m_ip;
-		bool m_is_dns_resolved;
-	};
-
 	class __CgiCtx
 	{
 	public:
@@ -333,7 +324,6 @@ private:
 	uint64_t m_timer_id;
 
 	DnsResolver* m_dns_resolver;
-	std::vector<__SvrInfo> m_svr_infos;
 
 	ClientNetSpeedTester* m_speed_tester;
 	bool m_is_testing_speed;
