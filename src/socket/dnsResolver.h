@@ -17,7 +17,11 @@ TODO: change to getaddrinfo_a
 class DnsResolver : public IMessageHandler
 {
 public:
-#define MSG_TYPE_DnsResolver_resolveEnd 56164781
+	enum EMsgType
+	{
+		EMsgType_resolveEnd = 56164781,
+	};
+
 	class DnsRecord
 	{
 	public:
@@ -30,7 +34,7 @@ public:
 	public:
 		Msg_ResolveEnd(DnsResolver* resolver, bool is_ok, const DnsRecord& record)
 		{
-			m_msg_type = MSG_TYPE_DnsResolver_resolveEnd;
+			m_msg_type = EMsgType_resolveEnd;
 			m_sender = resolver;
 			m_is_ok = is_ok;
 			m_record = record;

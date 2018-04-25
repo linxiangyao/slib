@@ -126,7 +126,7 @@ private:
 
 	virtual void onMessage(Message * msg, bool * is_handled) override
 	{
-		if (msg->m_sender == m_dns_resolver && msg->m_msg_type == MSG_TYPE_DnsResolver_resolveEnd)
+		if (msg->m_sender == m_dns_resolver && msg->m_msg_type == DnsResolver::EMsgType_resolveEnd)
 		{
 			*is_handled = true;
 			DnsResolver::Msg_ResolveEnd* m = (DnsResolver::Msg_ResolveEnd*)msg;

@@ -86,7 +86,7 @@ void ClientNetSpeedTester::onMessage(Message * msg, bool* isHandled)
 		__onMessage_clientDisconnected(*(ITcpSocketCallbackApi::ClientSocketDisconnectedMsg*)msg);
 		break;
 
-	case MSG_TYPE_DnsResolver_resolveEnd:
+	case DnsResolver::EMsgType_resolveEnd:
 		__onMessage_dnsResolved(msg);
 		break;
 	}
