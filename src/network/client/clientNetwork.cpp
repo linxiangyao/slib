@@ -83,7 +83,6 @@ bool ClientNetwork::start()
 			ClientNetSpeedTester::SvrInfo svr_info;
 			svr_info.m_svr_ip_or_name = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
 			svr_info.m_svr_port = m_init_param.m_svr_infos[i].m_svr_port;
-			svr_info.m_send_count = 0;
 			svr_infos.push_back(svr_info);
 		}
 		ClientNetSpeedTester::InitParam p;
