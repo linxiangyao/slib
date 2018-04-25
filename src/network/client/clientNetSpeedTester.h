@@ -77,6 +77,7 @@ public:
 private:
 	enum __EClientConncectState
 	{
+		__EClientConncectState_none,
 		__EClientConncectState_connecting,
 		__EClientConncectState_connected,
 		__EClientConncectState_disconnected,
@@ -85,7 +86,7 @@ private:
 	class __OneIpTestRecord
 	{
 	public:
-		__OneIpTestRecord() { m_sid = 0; m_send_bytes_per_second = 0; m_recv_bytes_per_second = 0; m_connect_state = __EClientConncectState_disconnected; }
+		__OneIpTestRecord() { m_sid = 0; m_send_bytes_per_second = 0; m_recv_bytes_per_second = 0; m_connect_state = __EClientConncectState_none; }
 
 		Ip m_ip;
 		socket_id_t m_sid;
@@ -97,12 +98,12 @@ private:
 	class __ClientCtx
 	{
 	public:
-		__ClientCtx(const SvrInfo& svr_info, InitParam* param);
+		__ClientCtx(const SvrInfo& svr_info, InitParam* param, ClientNetSpeedTester* tester);
 		~__ClientCtx();
 
-		void doTest();
-		void doStop();
-		bool getIsDone();
+		void start();
+		void stop();
+		bool getIsRunning();
 		void onDnsResolveEnd(const DnsResolver::DnsRecord& dns_record);
 		void onClientConnected(socket_id_t sid);
 		void onClientDisconnected(socket_id_t sid);
@@ -110,14 +111,19 @@ private:
 		SvrInfo m_svr_info;
 		std::vector<__OneIpTestRecord> m_ip_records;
 
+
 	private:
 		void __doDns();
-		int __getIpIndexBySid(socket_id_t sid) { return -1; }
+		void __doConnect();
+		void __addDnsRecord(const DnsResolver::DnsRecord& dns_record);
+		void __checkIsRunning();
 		void __postMsg(Message* msg);
 		void __notifyOneIpTestResult(const __OneIpTestRecord& record);
-		void __addDnsRecord(const DnsResolver::DnsRecord& dns_record);
+		int __getIpIndexBySid(socket_id_t sid);
 
 		InitParam* m_init_param;
+		ClientNetSpeedTester* m_speed_tester;
+		bool m_is_running;
 	};
 
 	// IMessageHandler
@@ -127,7 +133,7 @@ private:
 	void __onMessage_dnsResolved(Message* msg);
 
 	void __checkIsDone();
-	void __doTest();
+	void __start();
 	void __stop();
 	void __postMsgToTarget(Message* msg);
 	int __getClientCtxIndexBySvrName(const std::string& svr_ip_or_name);
@@ -136,7 +142,7 @@ private:
 	bool m_is_running;
 	Mutex m_mutex;
 	InitParam m_init_param;
-	std::vector<__ClientCtx*> m_client_ctx_vector;
+	std::vector<__ClientCtx*> m_client_ctxs;
 };
 
 

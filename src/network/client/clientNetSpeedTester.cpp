@@ -2,6 +2,8 @@
 SCLIENT_NAMESPACE_BEGIN
 
 
+
+// ClientNetSpeedTester ---------------------------------------------------------------------------------------------
 ClientNetSpeedTester::ClientNetSpeedTester()
 {
 	slog_d("new ClientNetSpeedTester=%0", (uint64_t)this);
@@ -10,15 +12,10 @@ ClientNetSpeedTester::ClientNetSpeedTester()
 
 ClientNetSpeedTester::~ClientNetSpeedTester()
 {
-	//slog_d("delete ClientNetSpeedTester=%0", (uint64_t)this);
-	//{
-	//	ScopeMutex __l(m_mutex);
-	//	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
-	//	{
-	//		m_init_param.m_sapi->releaseClientSocket(m_client_ctx_vector[i]->m_sid);
-	//		delete m_client_ctx_vector[i];
-	//	}
-	//}
+	slog_d("delete ClientNetSpeedTester=%0", (uint64_t)this);
+	ScopeMutex __l(m_mutex);
+	__stop();
+	delete_and_erase_collection_elements(&m_client_ctxs);
 }
 
 bool ClientNetSpeedTester::init(const InitParam& param)
@@ -33,8 +30,8 @@ bool ClientNetSpeedTester::init(const InitParam& param)
 
 	for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
 	{
-		__ClientCtx* client = new __ClientCtx(m_init_param.m_svr_infos[i], &m_init_param);
-		m_client_ctx_vector.push_back(client);
+		__ClientCtx* client = new __ClientCtx(m_init_param.m_svr_infos[i], &m_init_param, this);
+		m_client_ctxs.push_back(client);
 
 	}
 
@@ -50,12 +47,13 @@ bool ClientNetSpeedTester::start()
 	slog_d("speed_test start");
 
 	m_init_param.m_work_looper->addMsgHandler(this);
+	m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
 
 	Message* msg = new Message();
 	msg->m_msg_type = EMsgType_onTestStart;
 	__postMsgToTarget(msg);
 
-	__doTest();
+	__start();
 	return true;
 }
 
@@ -96,18 +94,18 @@ void ClientNetSpeedTester::onMessage(Message * msg, bool* isHandled)
 
 void ClientNetSpeedTester::__onMessage_clientConnected(const ITcpSocketCallbackApi::ClientSocketConnectedMsg & msg)
 {
-	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
-		m_client_ctx_vector[i]->onClientConnected(msg.m_client_sid);
+		m_client_ctxs[i]->onClientConnected(msg.m_client_sid);
 	}
 	__checkIsDone();
 }
 
 void ClientNetSpeedTester::__onMessage_clientDisconnected(const ITcpSocketCallbackApi::ClientSocketDisconnectedMsg & msg)
 {
-	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
-		m_client_ctx_vector[i]->onClientDisconnected(msg.m_client_sid);
+		m_client_ctxs[i]->onClientDisconnected(msg.m_client_sid);
 	}
 	__checkIsDone();
 }
@@ -127,14 +125,15 @@ void ClientNetSpeedTester::__checkIsDone()
 		return;
 
 	bool is_done = true;
-	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
-		if (!m_client_ctx_vector[i]->getIsDone())
+		if (m_client_ctxs[i]->getIsRunning())
 		{
 			is_done = false;
 			break;
 		}
 	}
+
 	if (is_done)
 	{
 		slog_d("speed_test done, stop");
@@ -142,30 +141,29 @@ void ClientNetSpeedTester::__checkIsDone()
 	}
 }
 
-void ClientNetSpeedTester::__doTest()
+void ClientNetSpeedTester::__start()
 {
-	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
-		m_client_ctx_vector[i]->doTest();
+		m_client_ctxs[i]->start();
 	}
 }
 
 void ClientNetSpeedTester::__stop()
 {
-	/*if (!m_is_running)
+	if (!m_is_running)
 		return;
 	m_is_running = false;
-
 	m_init_param.m_work_looper->removeMsgHandler(this);
 
-	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
-		m_init_param.m_sapi->stopClientSocket(m_client_ctx_vector[i]->m_sid);
+		m_client_ctxs[i]->stop();
 	}
 
 	Message* msg = new Message();
 	msg->m_msg_type = EMsgType_onTestEnd;
-	__postMsgToTarget(msg);*/
+	__postMsgToTarget(msg);
 }
 
 void ClientNetSpeedTester::__postMsgToTarget(Message * msg)
@@ -177,10 +175,10 @@ void ClientNetSpeedTester::__postMsgToTarget(Message * msg)
 
 int ClientNetSpeedTester::__getClientCtxIndexBySvrName(const std::string & svr_ip_or_name)
 {
-	for (size_t i = 0; i < m_client_ctx_vector.size(); ++i)
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
-		if (m_client_ctx_vector[i]->m_svr_info.m_svr_ip_or_name == svr_ip_or_name)
-			return i;
+		if (m_client_ctxs[i]->m_svr_info.m_svr_ip_or_name == svr_ip_or_name)
+			return (int)i;
 	}
 	return -1;
 }
@@ -191,7 +189,7 @@ ClientNetSpeedTester::__ClientCtx * ClientNetSpeedTester::__getClientCtxBySvrNam
 	if (index < 0)
 		return nullptr;
 	else
-		return m_client_ctx_vector[index];
+		return m_client_ctxs[index];
 }
 
 
@@ -204,51 +202,68 @@ ClientNetSpeedTester::__ClientCtx * ClientNetSpeedTester::__getClientCtxBySvrNam
 
 
 
-
-ClientNetSpeedTester::__ClientCtx::__ClientCtx(const SvrInfo& svr_info, InitParam* param)
+// __ClientCtx ---------------------------------------------------------------------------------------------
+ClientNetSpeedTester::__ClientCtx::__ClientCtx(const SvrInfo& svr_info, InitParam* param, ClientNetSpeedTester* tester)
 {
 	m_svr_info = svr_info;
 	m_init_param = param;
+	m_speed_tester = tester;
+	m_is_running = false;
 }
 
 ClientNetSpeedTester::__ClientCtx::~__ClientCtx()
 {
-	doStop();
-}
+	stop();
 
-void ClientNetSpeedTester::__ClientCtx::doTest()
-{
-	__doDns();
-}
-
-void ClientNetSpeedTester::__ClientCtx::doStop()
-{
 	for (size_t i = 0; i < m_ip_records.size(); ++i)
 	{
 		m_init_param->m_sapi->releaseClientSocket(m_ip_records[i].m_sid);
 	}
-	m_ip_records.clear();
 }
 
-bool ClientNetSpeedTester::__ClientCtx::getIsDone()
+void ClientNetSpeedTester::__ClientCtx::start()
 {
+	if (m_is_running)
+		return;
+	m_is_running = true;
+
+	__doDns();
+	__doConnect();
+}
+
+void ClientNetSpeedTester::__ClientCtx::stop()
+{
+	if (!m_is_running)
+		return;
+
+	m_is_running = false;
 	for (size_t i = 0; i < m_ip_records.size(); ++i)
 	{
-		if (m_ip_records[i].m_connect_state == __EClientConncectState_connecting)
-			return false;
+		m_init_param->m_sapi->stopClientSocket(m_ip_records[i].m_sid);
+		m_ip_records[i].m_connect_state = __EClientConncectState_none;
 	}
-	return true;
+}
+
+bool ClientNetSpeedTester::__ClientCtx::getIsRunning()
+{
+	return m_is_running;
 }
 
 void ClientNetSpeedTester::__ClientCtx::onDnsResolveEnd(const DnsResolver::DnsRecord & dns_record)
 {
+	if (!m_is_running)
+		return;
 	if (dns_record.m_name != m_svr_info.m_svr_ip_or_name)
 		return;
-	doTest();
+
+	__doDns();
+	__doConnect();
 }
 
 void ClientNetSpeedTester::__ClientCtx::onClientConnected(socket_id_t sid)
 {
+	if (!m_is_running)
+		return;
 	int ip_index = __getIpIndexBySid(sid);
 	if (ip_index < 0)
 		return;
@@ -256,17 +271,26 @@ void ClientNetSpeedTester::__ClientCtx::onClientConnected(socket_id_t sid)
 	__OneIpTestRecord* record = &m_ip_records[ip_index];
 	record->m_connect_state = __EClientConncectState_connected;
 	__notifyOneIpTestResult(*record);
+
+	__checkIsRunning();
 }
 
 void ClientNetSpeedTester::__ClientCtx::onClientDisconnected(socket_id_t sid)
 {
+	if (!m_is_running)
+		return;
 	int ip_index = __getIpIndexBySid(sid);
 	if (ip_index < 0)
 		return;
+	slog_d("speed_test disconnected");
 	__OneIpTestRecord* record = &m_ip_records[ip_index];
 	record->m_connect_state = __EClientConncectState_disconnected;
 	__notifyOneIpTestResult(*record);
+
+	__checkIsRunning();
 }
+
+
 
 void ClientNetSpeedTester::__ClientCtx::__doDns()
 {
@@ -283,9 +307,74 @@ void ClientNetSpeedTester::__ClientCtx::__doDns()
 	m_init_param->m_dns_resolver->startResolve(m_svr_info.m_svr_ip_or_name);
 }
 
+void ClientNetSpeedTester::__ClientCtx::__doConnect()
+{
+	for (size_t i = 0; i < m_ip_records.size(); ++i)
+	{
+		__OneIpTestRecord& record = m_ip_records[i];
+		if (record.m_connect_state == __EClientConncectState_none)
+		{
+			if (!m_init_param->m_sapi->startClientSocket(m_ip_records[i].m_sid))
+			{
+				slog_e("ClientNetSpeedTester::__ClientCtx::start fail to startClientSocket");
+				record.m_connect_state = __EClientConncectState_disconnected;
+				__notifyOneIpTestResult(record);
+			}
+			else
+			{
+				record.m_connect_state = __EClientConncectState_connecting;
+			}
+		}
+	}
+}
+
+void ClientNetSpeedTester::__ClientCtx::__addDnsRecord(const DnsResolver::DnsRecord& dns_record)
+{
+	if (m_ip_records.size() > 0)
+		return;
+
+	for (size_t i = 0; i < dns_record.m_ips.size(); ++i)
+	{
+		__OneIpTestRecord test_record;
+		test_record.m_ip = dns_record.m_ips[i];
+
+		ITcpSocketCallbackApi::CreateClientSocketParam param;
+		param.m_callback_looper = m_init_param->m_work_looper;
+		param.m_callback_target = m_speed_tester;
+		SocketUtil::ipToStr(test_record.m_ip, &param.m_svr_ip);
+		param.m_svr_port = m_svr_info.m_svr_port;
+		if (!m_init_param->m_sapi->createClientSocket(&test_record.m_sid, param))
+		{
+			slog_e("ClientNetSpeedTester::__ClientCtx::__addDnsRecord fail to createClientSocket");
+		}
+		m_ip_records.push_back(test_record);
+	}
+}
+
+void ClientNetSpeedTester::__ClientCtx::__checkIsRunning()
+{
+	if (!m_is_running)
+		return;
+
+	bool is_running = false;
+	for (size_t i = 0; i < m_ip_records.size(); ++i)
+	{
+		if (m_ip_records[i].m_connect_state == __EClientConncectState_connecting)
+		{
+			is_running = true;
+			break;
+		}
+	}
+
+	if (!is_running)
+	{
+		stop();
+	}
+}
+
 void ClientNetSpeedTester::__ClientCtx::__postMsg(Message * msg) 
 {
-	msg->m_sender = this;
+	msg->m_sender = m_speed_tester;
 	msg->m_target = m_init_param->m_notify_target;
 	m_init_param->m_notify_looper->postMessage(msg);
 }
@@ -301,28 +390,16 @@ void ClientNetSpeedTester::__ClientCtx::__notifyOneIpTestResult(const __OneIpTes
 	__postMsg(m);
 }
 
-void ClientNetSpeedTester::__ClientCtx::__addDnsRecord(const DnsResolver::DnsRecord& dns_record)
+int ClientNetSpeedTester::__ClientCtx::__getIpIndexBySid(socket_id_t sid)
 {
-	if (m_ip_records.size() > 0)
-		return;
-
-	for (size_t i = 0; i < dns_record.m_ips.size(); ++i)
+	for (size_t i = 0; i < m_ip_records.size(); ++i)
 	{
-		__OneIpTestRecord test_record;
-		test_record.m_connect_state = __EClientConncectState_connecting;
-		test_record.m_ip = dns_record.m_ips[i];
-
-		ITcpSocketCallbackApi::CreateClientSocketParam param;
-		param.m_callback_looper = m_init_param->m_work_looper;
-		param.m_callback_target = this;
-		SocketUtil::ipToStr(test_record.m_ip, &param.m_svr_ip);
-		param.m_svr_port = m_svr_info.m_svr_port;
-		if (!m_init_param->m_sapi->createClientSocket(&test_record.m_sid, param))
-		{
-		}
-		m_ip_records.push_back(test_record);
+		if (m_ip_records[i].m_sid == sid)
+			return (int)i;
 	}
+	return -1;
 }
+
 
 
 SCLIENT_NAMESPACE_END

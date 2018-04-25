@@ -336,7 +336,6 @@ private:
 	std::vector<__SvrInfo> m_svr_infos;
 
 	ClientNetSpeedTester* m_speed_tester;
-	std::map<std::string, ClientNetSpeedTester::TestResult> m_speed_test_results;
 	bool m_is_testing_speed;
 
 	std::vector<int32_t> m_connect_interval_mss;

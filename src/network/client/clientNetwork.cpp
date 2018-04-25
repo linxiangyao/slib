@@ -91,6 +91,7 @@ bool ClientNetwork::start()
 		p.m_notify_target = this;
 		p.m_work_looper = m_init_param.m_work_looper;
 		p.m_sapi = m_init_param.m_sapi;
+		p.m_dns_resolver = m_init_param.m_dns_resolver;
 		p.m_svr_infos = svr_infos;
 		if (!m_speed_tester->init(p))
 		{
@@ -131,8 +132,7 @@ void ClientNetwork::stop()
 	m_init_param.m_work_looper->removeMessagesByTarget(this);
 
 	m_init_param.m_work_looper->stopTimer(m_timer_id);
-	
-	m_speed_test_results.clear();
+
 
 	//m_client_ctx.resetConnectState();
 	//delete_and_erase_collection_elements(&m_send_pack_infos);
@@ -248,7 +248,7 @@ void ClientNetwork::onMessage(Message * msg, bool* isHandled)
 		switch (msg->m_msg_type)
 		{
 		case ClientNetSpeedTester::EMsgType_onTestStart: __onMsgNetSpeedTestStart(msg); break;
-		case ClientNetSpeedTester::EMsgType_onOneSvrResultUpdate: __onMsgNetSpeedTestResultUpdate(msg); break;
+		case ClientNetSpeedTester::EMsgType_onOneTestResult: __onMsgNetSpeedTestResultUpdate(msg); break;
 		case ClientNetSpeedTester::EMsgType_onTestEnd: __onMsgNetSpeedTestEnd(msg); break;
 		}
 		return;
@@ -390,18 +390,16 @@ void ClientNetwork::__onMsgNetSpeedTestEnd(Message * msg)
 void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 {
 	slog_v("ClientNetwork::SpeedTestReultUpdate");
-	ClientNetSpeedTester::TestResult r;
-	ClientNetSpeedTester::parseTestResultFromMsg(&r, msg);
-	m_speed_test_results[r.m_svr_ip_or_name + StringUtil::toString(r.m_svr_port)] = r;
+	ClientNetSpeedTester::Msg_oneTestResult* m = (ClientNetSpeedTester::Msg_oneTestResult*)msg;
 
-	int index = __getSvrInfoIndexBySvrIpAndPort(r.m_svr_ip_or_name, r.m_svr_port);
+	int index = __getSvrInfoIndexBySvrIpAndPort(m->m_svr_ip_or_name, m->m_svr_port);
 	if (index < 0)
 		return;
 	SvrInfo* svr_info = &(m_init_param.m_svr_infos[index]);
 	if (m_client_ctx.m_sid != 0)
 		return;
 
-	if (!r.m_is_connected)
+	if (!m->m_is_connected)
 		return;
 
 	m_speed_tester->stop();
