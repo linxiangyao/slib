@@ -192,6 +192,7 @@ public:
 
 		//SimpleClientNetworkConsoleLogic::init("120.78.58.61", 12306, cgi_infos);
 		SimpleClientNetworkConsoleLogic::init("127.0.0.1", 12306, cgi_infos, m_packer);
+		//SimpleClientNetworkConsoleLogic::init("www.baidu.com", 80, cgi_infos, m_packer);
 	}
 
 

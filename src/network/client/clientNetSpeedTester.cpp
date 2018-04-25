@@ -70,9 +70,16 @@ void ClientNetSpeedTester::stop()
 void ClientNetSpeedTester::onMessage(Message * msg, bool* isHandled)
 {
 	ScopeMutex __l(m_mutex);
-	if (msg->m_target != this)
-		return;
 	if (!m_is_running)
+		return;
+
+	if (msg->m_msg_type == DnsResolver::EMsgType_resolveEnd)
+	{
+		__onMessage_dnsResolved(msg);
+		return;
+	}
+
+	if (msg->m_target != this)
 		return;
 	*isHandled = true;
 
@@ -84,10 +91,6 @@ void ClientNetSpeedTester::onMessage(Message * msg, bool* isHandled)
 
 	case ITcpSocketCallbackApi::EMsgType_clientSocketDisconnected:
 		__onMessage_clientDisconnected(*(ITcpSocketCallbackApi::ClientSocketDisconnectedMsg*)msg);
-		break;
-
-	case DnsResolver::EMsgType_resolveEnd:
-		__onMessage_dnsResolved(msg);
 		break;
 	}
 }
