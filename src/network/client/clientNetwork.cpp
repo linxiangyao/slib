@@ -27,6 +27,7 @@ ClientNetwork::~ClientNetwork()
 	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_sapi->releaseClientSocket(m_client_ctx.m_sid);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
+	delete m_speed_tester;
 	delete m_dns_resolver;
 }
 
@@ -45,14 +46,44 @@ bool ClientNetwork::init(const InitParam& param)
 	m_timer_id = m_init_param.m_work_looper->createTimer(NULL);
 	m_client_ctx.m_init_param = &m_init_param;
 	
-	if (m_init_param.m_dns_resolver == nullptr)
+	// dns_resolver
 	{
-		m_dns_resolver = new DnsResolver();
-		if (!m_dns_resolver->init(m_init_param.m_work_looper))
-			return false;
-		m_init_param.m_dns_resolver = m_dns_resolver;
+		if (m_init_param.m_dns_resolver == nullptr)
+		{
+			m_dns_resolver = new DnsResolver();
+			if (!m_dns_resolver->init(m_init_param.m_work_looper))
+				return false;
+			m_init_param.m_dns_resolver = m_dns_resolver;
+		}
+		m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
 	}
-	m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
+
+	// speed_tester
+	{
+		std::vector<ClientNetSpeedTester::SvrInfo> svr_infos;
+		for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
+		{
+			ClientNetSpeedTester::SvrInfo svr_info;
+			svr_info.m_svr_ip_or_name = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
+			svr_info.m_svr_port = m_init_param.m_svr_infos[i].m_svr_port;
+			svr_infos.push_back(svr_info);
+		}
+
+		ClientNetSpeedTester::InitParam p;
+		p.m_notify_looper = m_init_param.m_work_looper;
+		p.m_notify_target = this;
+		p.m_work_looper = m_init_param.m_work_looper;
+		p.m_sapi = m_init_param.m_sapi;
+		p.m_dns_resolver = m_init_param.m_dns_resolver;
+		p.m_svr_infos = svr_infos;
+
+		m_speed_tester = new ClientNetSpeedTester();
+		if (!m_speed_tester->init(p))
+		{
+			slog_e("ClientNetwork::init fail to m_speed_tester->init");
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -70,39 +101,10 @@ bool ClientNetwork::start()
 	m_init_param.m_work_looper->addMsgHandler(this);
 	m_init_param.m_work_looper->addMsgTimerHandler(this);
 
+	if (!__doTestSvrSpeed())
 	{
-		if (m_speed_tester != NULL)
-		{
-			slog_e("ClientNetwork::start fail, m_speed_tester != NULL");
-			return false;
-		}
-		m_speed_tester = new ClientNetSpeedTester();
-		std::vector<ClientNetSpeedTester::SvrInfo> svr_infos;
-		for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
-		{
-			ClientNetSpeedTester::SvrInfo svr_info;
-			svr_info.m_svr_ip_or_name = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
-			svr_info.m_svr_port = m_init_param.m_svr_infos[i].m_svr_port;
-			svr_infos.push_back(svr_info);
-		}
-		ClientNetSpeedTester::InitParam p;
-		p.m_notify_looper = m_init_param.m_work_looper;
-		p.m_notify_target = this;
-		p.m_work_looper = m_init_param.m_work_looper;
-		p.m_sapi = m_init_param.m_sapi;
-		p.m_dns_resolver = m_init_param.m_dns_resolver;
-		p.m_svr_infos = svr_infos;
-		if (!m_speed_tester->init(p))
-		{
-			slog_e("ClientNetwork::start fail to m_speed_tester->init");
-			return false;
-		}
-
-		if (!__doTestSvrSpeed())
-		{
-			slog_e("ClientNetwork::start fail to __doTestSvrSpeed");
-			return false;
-		}
+		slog_e("ClientNetwork::start fail to __doTestSvrSpeed");
+		return false;
 	}
 	
 	if (!m_init_param.m_work_looper->startTimer(m_timer_id, 1, 1))
@@ -466,7 +468,7 @@ bool ClientNetwork::__doTestSvrSpeed()
 {
 	if (!m_speed_tester->start())
 	{
-		slog_e("fail to m_speed_tester->start");
+		slog_e("ClientNetwork::__doTestSvrSpeed fail to m_speed_tester->start");
 		return false;
 	}
 	m_is_testing_speed = true;
