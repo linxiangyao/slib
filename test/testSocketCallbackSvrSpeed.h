@@ -33,7 +33,7 @@ private:
 		ITcpSocketCallbackApi::CreateSvrSocketParam param;
 		param.m_callback_looper = &m_console_api->getMessageLooper();
 		param.m_callback_target = this;
-		param.m_svr_ip_or_name = "0.0.0.0";
+		param.m_svr_ip = "0.0.0.0";
 		param.m_svr_port = 12306;
 		if (!m_sapi->createSvrListenSocket(&m_listen_sid, param))
 		{

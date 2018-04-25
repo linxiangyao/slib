@@ -15,6 +15,7 @@
 #include "testSocketCallbackClientSpeed.h"
 #include "testSocketCallbackSvr.h"
 #include "testSocketCallbackSvrSpeed.h"
+#include "testDnsResolver.h"
 #include "testClientNetwork.h"
 #include "testServerNetwork.h"
 //#include "testJson.h"
@@ -27,32 +28,15 @@
 using namespace std;
 USING_NAMESPACE_S
 
-//int createService(SC_HANDLE schSCManager, LPSTR szPath, LPSTR szServiceName) {
-//	SC_HANDLE schService = CreateServiceA(schSCManager, szServiceName, "demo_srv",
-//		SERVICE_ALL_ACCESS,         //存取权限
-//		SERVICE_WIN32_OWN_PROCESS,  //服务类别
-//		SERVICE_DEMAND_START,       //启动类型
-//		SERVICE_ERROR_NORMAL,       //错误控制类别
-//		szPath, NULL, NULL, NULL, NULL, NULL);
-//
-//	if (schService == NULL) {
-//		printf("Create service failed (%d).\n", GetLastError());
-//		return -1;
-//	}
-//
-//	printf("Create service succeeded.\n");
-//	CloseServiceHandle(schService);
-//	schService = NULL;
-//	return 0;
-//}
-
-
 
 int main(int argc, char** argv)
 {
 	printf("test start **************************************************************\n");
 	//__testMsgLoopThread();
-	__testMsgLoopThreadPerformance();
+	//__testMsgLoopThreadPerformance();
+	//__testDns();
+	//__testDnsApi();
+	__testDnsResolver();
 	
 	//__testBinary();
 	//__testVarint();
@@ -68,7 +52,7 @@ int main(int argc, char** argv)
 	//__testClientNetwork();
 
 	printf("test end **************************************************************\n");
-    return 0;
+	return 0;
 }
 
 

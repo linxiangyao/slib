@@ -23,6 +23,7 @@
     <ClInclude Include="..\..\..\test\testChatServer.h" />
     <ClInclude Include="..\..\..\test\testClientNetwork.h" />
     <ClInclude Include="..\..\..\test\testBinary.h" />
+    <ClInclude Include="..\..\..\test\testDnsResolver.h" />
     <ClInclude Include="..\..\..\test\testFileUtil.h" />
     <ClInclude Include="..\..\..\test\testFun.h" />
     <ClInclude Include="..\..\..\test\testjson.h" />

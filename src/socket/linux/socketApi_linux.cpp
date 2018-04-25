@@ -1,7 +1,5 @@
-#include "../../comm/comm.h"
-//#define S_OS_LINUX
-#if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
 #include "socketApi_linux.h"
+#if defined(S_OS_LINUX) | defined(S_OS_MAC) | defined(S_OS_ANDROID)
 S_NAMESPACE_BEGIN
 
 
@@ -21,74 +19,7 @@ void releaseSocketLib()
 
 
 // inner static funtion ------------------------------------------------------------------------
-static bool __bindAndListen(int s_svr, const std::string& svr_ip_or_name, int svr_port)
-{
-    uint32_t svrIp = 0;
-	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &svrIp))
-	{
-		slog_e("__bindAndListen fail to getIpByName!");
-		return false;
-	}
-    
-    struct sockaddr_in server_addr;
-    SocketUtil::initAddr(&server_addr, svrIp, svr_port);
-    
-    int enable = 1;
-    if (setsockopt(s_svr, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable)) != 0)
-    {
-		slog_e("__bindAndListen fail to setsockopt SO_REUSEADDR!");
-        return false;
-    }
-    
-    if (bind(s_svr, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)) < 0)
-    {
-		slog_e("__bindAndListen fail to bind!");
-        return false;
-    }
-    
-    if (listen(s_svr, 5) < 0)
-    {
-		slog_e("__bindAndListen fail to listen!");
-        return false;
-    }
-    
-    return true;
-}
-
-static bool __accept(int svr_accept_socket, int* svr_trans_socket)
-{
-    char remote_ip_str[16];
-    memset(remote_ip_str, 0, 16);
-    uint16_t remote_port;
-    
-    struct sockaddr_in from_addr;
-    memset(&from_addr, 0, sizeof(struct sockaddr_in));
-    socklen_t addr_len = sizeof(sockaddr_in);
-    
-    *svr_trans_socket = ::accept(svr_accept_socket, (struct sockaddr*)&from_addr, &addr_len);
-    if (*svr_trans_socket < 0)
-    {
-		slog_e("__accept fail to accept");
-        return false;
-    }
-    char* from_ip_str = inet_ntoa(from_addr.sin_addr);
-    memcpy(remote_ip_str, from_ip_str, strlen(from_ip_str));
-    remote_port = ntohs(from_addr.sin_port);
-    return true;
-}
-
-static bool __changeSocketToAsync(int s)
-{
-	int flags = fcntl(s, F_GETFL, 0);
-	if (fcntl(s, F_SETFL, flags | O_NONBLOCK) < 0)
-	{
-		slog_e("__changeSocketToAsync fail to fcntl");
-		return false;
-	}
-	return true;
-}
-
-static bool __isSocketOk(int s)
+static bool __isSocketOk(socket_t s)
 {
 	int err = 0;
 	socklen_t err_len = sizeof(err);
@@ -99,383 +30,71 @@ static bool __isSocketOk(int s)
 	return true;
 }
 
-static int s_max(int l, int r)
-{
-	return l > r ? l : r;
-}
-
-
-
 
 // socketUtil ------------------------------------------------------------------------
-void SocketUtil::initAddr(struct sockaddr_in* addr, uint32_t ip, int port)
-{
-	memset(addr, 0, sizeof(struct sockaddr_in));
-	addr->sin_family = AF_INET;
-	addr->sin_addr.s_addr = ip;
-	addr->sin_port = htons((short)port);
-}
-
-bool SocketUtil::connect(SOCKET client_socket, const std::string& svr_ip_or_name, int svr_port)
-{
-	uint32_t svr_ip = 0;
-	if (!SocketUtil::getIpByName(svr_ip_or_name.c_str(), &svr_ip))
-	{
-		slog_e("connect fail to getIpByName!");
-		return false;
-	}
-
-	struct sockaddr_in server_address;
-	SocketUtil::initAddr(&server_address, svr_ip, svr_port);
-
-	if (::connect(client_socket, (sockaddr*)&server_address, sizeof(server_address)) < 0)
-	{
-		if (errno == EINPROGRESS)
-			return true;
-		slog_e("connect fail to connect, ip=%0, port=%1!", svr_ip_or_name.c_str(), svr_port);
-		return false;
-	}
-	return true;
-}
-
-bool SocketUtil::recv(SOCKET s, byte_t* buf, size_t buf_len, size_t* recv_len)
+bool SocketUtil::recv(socket_t s, byte_t* buf, size_t buf_len, size_t* recv_len)
 {
 	*recv_len = 0;
 	ssize_t ret = ::recv(s, (char*)buf, (int)buf_len, 0);
+
 	if (ret < 0)
 	{
 		if (ret == EAGAIN)
 			return true;
-		return false;
+		else
+			return false;
 	}
 	else if (ret == 0)
 	{
 		return false;
 	}
-
-	*recv_len = ret;
-	return true;
+	else
+	{
+		*recv_len = ret;
+		return true;
+	}
 }
 
-bool SocketUtil::send(SOCKET s, const byte_t* data, size_t data_len, size_t* real_send)
+bool SocketUtil::send(socket_t s, const byte_t* data, size_t data_len, size_t* real_send)
 {
 	ssize_t ret = ::send(s, (const char*)data, (int)data_len, 0);
 
 	if (ret <= 0)
 	{
 		*real_send = 0;
-		return false;
-	}
-	*real_send = ret;
-	return true;
-}
-
-bool SocketUtil::send(SOCKET s, const byte_t* data, size_t data_len)
-{
-	while (true)
-	{
-		size_t real_send = 0;
-		bool isOk = send(s, data, data_len, &real_send);
-		if (!isOk)
-			return false;
-		if (real_send >= data_len) {
+		if (errno == EAGAIN)
 			return true;
-		}
-
-		data += real_send;
-		data_len -= real_send;
+		else
+			return false;
 	}
-	return true;
-}
-
-bool SocketUtil::getIpByName(const char* name, uint32_t* ip)
-{
-	if (ipToUint32(name, ip))
+	else
 	{
+		*real_send = ret;
 		return true;
 	}
+}
 
-	struct hostent* host = gethostbyname(name);
-	if (host == NULL)
+void SocketUtil::closeSocket(socket_t s)
+{
+	::close(s);
+}
+
+bool SocketUtil::changeSocketToAsync(socket_t s)
+{
+	int flags = fcntl(s, F_GETFL, 0);
+	if (fcntl(s, F_SETFL, flags | O_NONBLOCK) < 0)
 	{
-		//        printf("gethostbyname error\n");
+		slog_e("SocketUtil::changeSocketToAsync fail to fcntl");
 		return false;
 	}
-
-	// printf("official name: %s\n\n", host->h_name);
-	//  printf("address length: %d bytes\n\n", host->h_length);
-
-
-	//printf("host name alias: \n");
-	//for (int i = 0; host->h_aliases[i]; i++) {
-	//    printf("%s\n", host->h_aliases[i]);
-	//}
-	//
-	//printf("\naddress list: \n");
-	if (host->h_addr_list[0] == NULL)
-		return false;
-
-	*ip = ((struct in_addr *)host->h_addr_list[0])->s_addr;
-
-	//for (int i = 0; host->h_addr_list[i]; i++) {
-	//    struct in_addr * p = (struct in_addr *)host->h_addr_list[i];
-	//    struct in_addr  a = *p;
-	//    const char *ip = inet_ntoa(a);
-	//    printf("\nip: %s  \n", ip);
-	//}
-
 	return true;
 }
 
-bool SocketUtil::ipToStr(uint32_t ip, std::string* ipStr)
+int SocketUtil::getErr()
 {
-	const char * sz = inet_ntoa(*((struct in_addr *)&ip));
-	if (sz == NULL)
-		return false;
-
-	*ipStr = sz;
-	return true;
+	return errno;
 }
 
-bool SocketUtil::ipToUint32(const std::string& ipStr, uint32_t* ip)
-{
-	*ip = inet_addr(ipStr.c_str());
-	if (INADDR_NONE == *ip)
-		return false;
-	return true;
-}
-
-bool SocketUtil::isValidSocket(socket_id_t s)
-{
-	return s > 0;
-}
-
-uint16_t SocketUtil::hToNs(uint16_t s)
-{
-	return htons(s);
-}
-
-uint32_t SocketUtil::hToNl(uint32_t l)
-{
-	return htonl(l);
-}
-
-uint16_t SocketUtil::nToHs(uint16_t s)
-{
-	return ntohs(s);
-}
-
-uint32_t SocketUtil::nToHl(uint32_t l)
-{
-	return ntohl(l);
-}
-
-
-
-
-
-
-
-// TcpSocketBlockApi ------------------------------------------------------------------------
-ITcpSocketBlockApi* ITcpSocketBlockApi::newBlockApi()
-{
-	return new TcpSocketBlockApi();
-}
-
-TcpSocketBlockApi::TcpSocketBlockApi()
-{
-	m_sid_seed = 0;
-}
-
-TcpSocketBlockApi::~TcpSocketBlockApi()
-{
-	for(SidToSocketMap::iterator it = m_sid_2_socket.begin(); it != m_sid_2_socket.end(); ++it)
-	{
-		close(it->second);
-	}
-}
-
-bool TcpSocketBlockApi::openSocket(socket_id_t* sid)
-{
-    int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == -1)
-        return false;
-
-	ScopeMutex __l(m_mutex);
-	*sid = ++m_sid_seed;
-	m_sid_2_socket[*sid] = s;
-    return true;
-}
-
-void TcpSocketBlockApi::closeSocket(socket_id_t sid)
-{
-    if(sid <= 0)
-        return;
-    
-    ScopeMutex __l(m_mutex);
-    std::map<int64_t, int>::iterator it = m_sid_2_socket.find(sid);
-    if(it == m_sid_2_socket.end())
-        return;
-    
-    int s = it->second;
-    m_sid_2_socket.erase(it);
-    close(s);
-}
-
-bool TcpSocketBlockApi::bindAndListen(socket_id_t svr_listen_sid, const std::string& svr_ip_or_name, int svr_port)
-{
-	if (svr_listen_sid <= 0)
-	{
-		printf("sid <= 0\n");
-		return false;
-	}
-
-    int svr_listen_socket = 0;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getSocketBySid(svr_listen_sid, &svr_listen_socket))
-		{
-			printf("!__getSocketBySid\n");
-			return false;
-		}
-	}
-    
-    if(!__bindAndListen(svr_listen_socket, svr_ip_or_name, svr_port))
-	{
-		printf("!__bindAndListen\n");
-		return false;
-	}
-    
-    return true;
-}
-
-bool TcpSocketBlockApi::accept(socket_id_t svr_listen_sid, socket_id_t* svr_tran_sid)
-{
-	if (svr_listen_sid <= 0 || svr_tran_sid == NULL)
-	{
-		printf("svr_listen_sid <= 0 || svr_tran_sid == NULL\n");
-		return false;
-	}
-    *svr_tran_sid = 0;
-
-    int svr_listen_socket = 0;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getSocketBySid(svr_listen_sid, &svr_listen_socket))
-		{
-			printf("!__getSocketBySid\n");
-			return false;
-		}
-	}
-    
-    int svr_tran_socket = 0;
-    if(!__accept(svr_listen_socket, &svr_tran_socket))
-	{
-		printf("!__accept\n");
-		return false;
-	}
-
-	*svr_tran_sid = ++m_sid_seed;
-	m_sid_2_socket[*svr_tran_sid] = svr_tran_socket;
-
-    return true;
-}
-
-bool TcpSocketBlockApi::connect(socket_id_t client_sid, const std::string& svr_ip_or_name, int svr_port)
-{
-    if(client_sid <= 0)
-        return false;
-
-	int client_socket = 0;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getSocketBySid(client_sid, &client_socket))
-		{
-			printf("!__getSocketBySid\n");
-			return false;
-		}
-	}
-    
-    bool ret = SocketUtil::connect(client_socket, svr_ip_or_name, svr_port);
-    return ret;
-}
-
-void TcpSocketBlockApi::disconnect(socket_id_t client_sid)
-{
-    int client_socket = 0;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getSocketBySid(client_sid, &client_socket))
-			return;
-	}
-    shutdown(client_socket, SHUT_RDWR);
-}
-
-bool TcpSocketBlockApi::send(socket_id_t sid, const byte_t* data, size_t data_len)
-{
-    if(sid == 0 || data == NULL || data_len == 0)
-        return false;
-    
-    int s = 0;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getSocketBySid(sid, &s))
-			return false;
-	}
-
-    while (true)
-    {
-        int64_t realSend = ::send(s, (const char*)data, (int)data_len, 0);
-        if (realSend < 0)
-            return false;
-
-        if (realSend >= data_len)
-            return true;
-
-        data_len -= realSend;
-    }
-
-    return true;
-}
-
-bool TcpSocketBlockApi::recv(socket_id_t sid, byte_t* buf, size_t buf_len, size_t* recv_len)
-{
-    *recv_len = 0;
-    int s = 0;
-	{
-		ScopeMutex __l(m_mutex);
-		if (!__getSocketBySid(sid, &s))
-			return false;
-	}
-    
-    int64_t ret = ::recv(s, (char*)buf, (int)buf_len, 0);
-    if (ret > 0)
-    {
-        *recv_len = ret;
-        return true;
-    }
-    else if (ret == 0)
-    {
-        printf("recv disconnected\n");
-        return false;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-
-
-bool TcpSocketBlockApi::__getSocketBySid(int64_t sid, int* s)
-{
-    std::map<int64_t, int>::iterator it = m_sid_2_socket.find(sid);
-    if(it == m_sid_2_socket.end())
-        return false;
-
-    *s = it->second;
-    return true;
-}
 
 
 
@@ -542,7 +161,7 @@ public:
 
 		__Msg_cmd_connect* msg = new __Msg_cmd_connect();
 		msg->m_socket = s;
-		msg->m_svr_ip_or_name = svr_ip;
+		msg->m_svr_ip = svr_ip;
 		msg->m_svr_port = svr_port;
 		m_msgs.push_back(msg);
 
@@ -619,7 +238,7 @@ private:
 		virtual ~__Msg() {}
 
 		__EMsgType m_msg_type;
-		int m_socket;
+		socket_t m_socket;
 	};
 
 	class __Msg_cmd_connect : public __Msg
@@ -627,7 +246,7 @@ private:
 	public:
 		__Msg_cmd_connect() { m_msg_type = __EMsgType_cmd_connect; m_svr_port = 0; }
 		~__Msg_cmd_connect() {}
-		std::string m_svr_ip_or_name;
+		std::string m_svr_ip;
 		uint32_t m_svr_port;
 	};
 
@@ -682,7 +301,7 @@ private:
 				{
 					FD_SET(ctx->m_socket, &rdSet);
 					FD_SET(ctx->m_socket, &wdSet);
-					maxFd = s_max(maxFd, ctx->m_socket);
+					maxFd = max(maxFd, ctx->m_socket);
 				}
 				else if (ctx->m_connet_state == __ESocketConnectState_connected)
 				{
@@ -691,7 +310,7 @@ private:
 					{
 						FD_SET(ctx->m_socket, &wdSet);
 					}
-					maxFd = s_max(maxFd, ctx->m_socket);
+					maxFd = max(maxFd, ctx->m_socket);
 				}
 			}
 
@@ -777,15 +396,15 @@ private:
 				ctx->m_socket = msg->m_socket;
 				m_socket_ctxs.push_back(ctx);
 
-				if (!__changeSocketToAsync(ctx->m_socket))
+				if (!SocketUtil::changeSocketToAsync(ctx->m_socket))
 				{
-					slog_e("fail to __changeSocketToAsync");
+					slog_e("fail to SocketUtil::changeSocketToAsync");
 					__releaseSocketCtx(ctx);
 					continue;
 				}
 
-				slog_d("connect socket=%0, svrIp=%1, svrPort=%2", ctx->m_socket, msg->m_svr_ip_or_name, msg->m_svr_port);
-				if (!SocketUtil::connect(ctx->m_socket, msg->m_svr_ip_or_name, msg->m_svr_port))
+				slog_d("connect socket=%0, svrIp=%1, svrPort=%2", ctx->m_socket, msg->m_svr_ip, msg->m_svr_port);
+				if (!SocketUtil::connect(ctx->m_socket, msg->m_svr_ip, msg->m_svr_port))
 				{
 					slog_e("fail to connect");
 					__releaseSocketCtx(ctx);
@@ -931,7 +550,7 @@ private:
 		write(m_pipe[1], "0", 1);		
 	}
 	
-	int __getSocketCtxIndexBySocket(int s)
+	int __getSocketCtxIndexBySocket(socket_t s)
 	{
 		for (size_t i = 0; i < m_socket_ctxs.size(); ++i)
 		{
@@ -1187,7 +806,7 @@ private:
 				__SvrListenSocketCtx* ctx = m_listen_ctxs[i];
 				FD_SET(ctx->m_socket, &rdSet);
 				FD_SET(ctx->m_socket, &wdSet);
-				maxFd = s_max(maxFd, ctx->m_socket);
+				maxFd = max(maxFd, ctx->m_socket);
 			}
 
 			for (size_t i = 0; i < m_tran_ctxs.size(); ++i)
@@ -1198,7 +817,7 @@ private:
 				{
 					FD_SET(ctx->m_socket, &wdSet);
 				}
-				maxFd = s_max(maxFd, ctx->m_socket);
+				maxFd = max(maxFd, ctx->m_socket);
 			}
 
 			// select -----
@@ -1231,7 +850,7 @@ private:
 					continue;
 
 				int tran_socket = INVALID_SOCKET;
-				if (!__accept(ctx->m_socket, &tran_socket))
+				if (!SocketUtil::accept(ctx->m_socket, &tran_socket))
 				{
 					slog_e("fail to accept");
 					__releaseListenCtx(ctx);
@@ -1356,14 +975,14 @@ private:
 			ctx->m_socket = msg->m_socket;
 			m_listen_ctxs.push_back(ctx);
 
-			if (!__changeSocketToAsync(ctx->m_socket))
+			if (!SocketUtil::changeSocketToAsync(ctx->m_socket))
 			{
-				slog_e("fail to __changeSocketToAsync, socket=%0", ctx->m_socket);
+				slog_e("fail to SocketUtil::changeSocketToAsync, socket=%0", ctx->m_socket);
 				__releaseListenCtx(ctx);
 				return;
 			}
 
-			if (!__bindAndListen(ctx->m_socket, msg->m_svr_ip, msg->m_svr_port))
+			if (!SocketUtil::bindAndListen(ctx->m_socket, msg->m_svr_ip, msg->m_svr_port))
 			{
 				slog_e("fail to bind and listen, socket=%0", ctx->m_socket);
 				__releaseListenCtx(ctx);
@@ -1433,7 +1052,7 @@ private:
 		write(m_pipe[1], "0", 1);
 	}
 
-	int __getSvrListenSocketCtxIndexBySocket(int s)
+	int __getSvrListenSocketCtxIndexBySocket(socket_t s)
 	{
 		for (size_t i = 0; i < m_listen_ctxs.size(); ++i)
 		{
@@ -1444,7 +1063,7 @@ private:
 		return -1;
 	}
 
-	int __getSvrTranSocketCtxIndexBySocket(int s)
+	int __getSvrTranSocketCtxIndexBySocket(socket_t s)
 	{
 		for (size_t i = 0; i < m_tran_ctxs.size(); ++i)
 		{
@@ -1612,7 +1231,7 @@ bool TcpSocketCallbackApi::createClientSocket(socket_id_t* client_sid, const Cre
         return false;
 	*client_sid = 0;
 
-	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip_or_name.size() == 0 || param.m_svr_port == 0)
+	if (param.m_callback_looper == NULL || param.m_callback_target == NULL || param.m_svr_ip.size() == 0 || param.m_svr_port == 0)
 	{
 		slog_e("createClientSocket fail, param error");
 		return false;
@@ -1677,13 +1296,13 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
 		slog_e("startClientSocket fail to find ctx, client_sid=%0", client_sid);
 		return false;
 	}
-	if (ctx->m_socket != 0)
+	if (ctx->m_socket != INVALID_SOCKET)
 	{
-		slog_d("startClientSocket ctx->m_socket != 0, maybe already start? ignore. client_sid=%0", client_sid);
+		slog_d("startClientSocket ctx->m_socket != INVALID_SOCKET, maybe already start? ignore. client_sid=%0", client_sid);
 		return true;
 	}
 
-	int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	socket_t s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s <= 0)
 	{
 		slog_e("startClientSocket fail to create socket, client_sid=%0", client_sid);
@@ -1693,7 +1312,7 @@ bool TcpSocketCallbackApi::startClientSocket(socket_id_t client_sid)
 	slog_d("startClientSocket ok, client_sid=%0, client_socket=%1", client_sid, ctx->m_socket);
 
 	__ClientThreadRun* run = (__ClientThreadRun*)m_client_thread->getRun();
-	run->postMsg_cmdConnectSvr(ctx->m_socket, ctx->m_client_param.m_svr_ip_or_name, ctx->m_client_param.m_svr_port);
+	run->postMsg_cmdConnectSvr(ctx->m_socket, ctx->m_client_param.m_svr_ip, ctx->m_client_param.m_svr_port);
 	
 	return true;
 }
@@ -1727,7 +1346,7 @@ std::string TcpSocketCallbackApi::getClientSocketSvrIp(socket_id_t client_sid)
 	__SocketCtx* ctx = __getClientCtxById(client_sid);
 	if (ctx == NULL)
 		return "";
-	return ctx->m_client_param.m_svr_ip_or_name;
+	return ctx->m_client_param.m_svr_ip;
 }
 
 uint32_t TcpSocketCallbackApi::getClientSocketSvrPort(socket_id_t client_sid)
@@ -1795,7 +1414,7 @@ bool TcpSocketCallbackApi::startSvrListenSocket(socket_id_t svr_listen_sid)
 		return true;
 	}
 
-	int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	socket_t s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s == INVALID_SOCKET)
 	{
 		slog_e("startSvrListenSocket fail to create socket, svr_listen_sid=%0", svr_listen_sid);
@@ -1805,7 +1424,7 @@ bool TcpSocketCallbackApi::startSvrListenSocket(socket_id_t svr_listen_sid)
 	slog_d("startSvrListenSocket ok, svr_listen_sid=%0, svr_listen_socket=%1", svr_listen_sid, ctx->m_socket);
 
 	__SvrThreadRun* run = (__SvrThreadRun*)m_svr_thread->getRun();
-	run->postMsg_cmdStartListenSocket(ctx->m_socket, ctx->m_svr_param.m_svr_ip_or_name, ctx->m_svr_param.m_svr_port);
+	run->postMsg_cmdStartListenSocket(ctx->m_socket, ctx->m_svr_param.m_svr_ip, ctx->m_svr_param.m_svr_port);
 	return true;
 }
 
@@ -1846,7 +1465,7 @@ std::string TcpSocketCallbackApi::getSvrListenSocketIp(socket_id_t svr_listen_si
 	__SocketCtx* ctx = __getClientCtxById(svr_listen_sid);
 	if (ctx == NULL)
 		return "";
-	return ctx->m_svr_param.m_svr_ip_or_name;
+	return ctx->m_svr_param.m_svr_ip;
 }
 
 uint32_t TcpSocketCallbackApi::getSvrListenSocketPort(socket_id_t svr_listen_sid)
@@ -1917,7 +1536,7 @@ void TcpSocketCallbackApi::onMessageTimerTick(uint64_t timer_id, void * user_dat
 void TcpSocketCallbackApi::__onMsg_ClientSocketConnected(Message* msg)
 {
 	ScopeMutex __l(m_mutex);
-	int client_socket = msg->m_args.getInt32("client_socket");
+	socket_t client_socket = msg->m_args.getInt32("client_socket");
 	__SocketCtx* ctx = __getClientCtxBySocket(client_socket);
 	if (ctx == NULL)
 		return;
@@ -1931,7 +1550,7 @@ void TcpSocketCallbackApi::__onMsg_ClientSocketConnected(Message* msg)
 void TcpSocketCallbackApi::__onMsg_ClientSocketRecvData(Message* msg)
 {
 	ScopeMutex __l(m_mutex);
-	int client_socket = msg->m_args.getInt32("client_socket");
+	socket_t client_socket = msg->m_args.getInt32("client_socket");
 	__SocketCtx* ctx = __getClientCtxBySocket(client_socket);
 	if (ctx == NULL)
 		return;
@@ -1946,7 +1565,7 @@ void TcpSocketCallbackApi::__onMsg_ClientSocketRecvData(Message* msg)
 void TcpSocketCallbackApi::__onMsg_ClientSocketSendDataEnd(Message* msg)
 {
 	ScopeMutex __l(m_mutex);
-	int client_socket = msg->m_args.getInt32("client_socket");
+	socket_t client_socket = msg->m_args.getInt32("client_socket");
 	__SocketCtx* ctx = __getClientCtxBySocket(client_socket);
 	if (ctx == NULL)
 		return;
@@ -1960,7 +1579,7 @@ void TcpSocketCallbackApi::__onMsg_ClientSocketSendDataEnd(Message* msg)
 void TcpSocketCallbackApi::__onMsg_ClientSocketClosed(Message* msg)
 {
 	ScopeMutex __l(m_mutex);
-	int client_socket = msg->m_args.getInt32("client_socket");
+	socket_t client_socket = msg->m_args.getInt32("client_socket");
 	__SocketCtx* ctx = __getClientCtxBySocket(client_socket);
 	if (ctx == NULL)
 		return;
@@ -1979,7 +1598,7 @@ void TcpSocketCallbackApi::__onMsg_SvrListenSocketListened(Message* msg)
 {
 	slog_v("recv msg EMsgType_svrListenSocketListened");
 	ScopeMutex __l(m_mutex);
-	int svr_listen_socket = msg->m_args.getInt32("svr_listen_socket");
+	socket_t svr_listen_socket = msg->m_args.getInt32("svr_listen_socket");
 	__SocketCtx* ctx = __getSvrListenCtxBySocket(svr_listen_socket);
 	if (ctx == NULL)
 		return;
@@ -1994,8 +1613,8 @@ void TcpSocketCallbackApi::__onMsg_SvrListenSocketAccepted(Message* msg)
 {
 	slog_v("recv msg EMsgType_svrListenSocketAccepted");
 	ScopeMutex __l(m_mutex);
-	int svr_listen_socket = msg->m_args.getInt32("svr_listen_socket");
-	int svr_tran_socket = msg->m_args.getUint32("svr_tran_socket");
+	socket_t svr_listen_socket = msg->m_args.getInt32("svr_listen_socket");
+	socket_t svr_tran_socket = msg->m_args.getUint32("svr_tran_socket");
 	__SocketCtx* ctx_listen = __getSvrListenCtxBySocket(svr_listen_socket);
 	if (ctx_listen == NULL)
 		return;
@@ -2020,7 +1639,7 @@ void TcpSocketCallbackApi::__onMsg_SvrListenSocketClosed(Message* msg)
 {
 	slog_v("recv msg EMsgType_svrListenSocketClosed");
 	ScopeMutex __l(m_mutex);
-	int svr_listen_socket = msg->m_args.getInt32("svr_listen_socket");
+	socket_t svr_listen_socket = msg->m_args.getInt32("svr_listen_socket");
 	__SocketCtx* ctx = __getSvrListenCtxBySocket(svr_listen_socket);
 	if (ctx == NULL)
 		return;
@@ -2036,7 +1655,7 @@ void TcpSocketCallbackApi::__onMsg_SvrTranSocketRecvData(Message* msg)
 {
 	slog_v("recv msg EMsgType_svrTranSocketRecvData");
 	ScopeMutex __l(m_mutex);
-	int svr_tran_socket = msg->m_args.getInt32("svr_tran_socket");
+	socket_t svr_tran_socket = msg->m_args.getInt32("svr_tran_socket");
 	__SocketCtx* ctx = __getSvrTranCtxBySocket(svr_tran_socket);
 	if (ctx == NULL)
 		return;
@@ -2052,7 +1671,7 @@ void TcpSocketCallbackApi::__onMsg_SvrTranSocketSendDataEnd(Message* msg)
 {
 	slog_v("recv msg EMsgType_svrTranSocketSendDataEnd");
 	ScopeMutex __l(m_mutex);
-	int svr_tran_socket = msg->m_args.getInt32("svr_tran_socket");
+	socket_t svr_tran_socket = msg->m_args.getInt32("svr_tran_socket");
 	__SocketCtx* ctx = __getSvrTranCtxBySocket(svr_tran_socket);
 	if (ctx == NULL)
 		return;
@@ -2067,7 +1686,7 @@ void TcpSocketCallbackApi::__onMsg_SvrTransSocketClosed(Message* msg)
 {
 	slog_v("recv msg EMsgType_svrTranSocketClosed");
 	ScopeMutex __l(m_mutex);
-	int svr_tran_socket = msg->m_args.getInt32("svr_tran_socket");
+	socket_t svr_tran_socket = msg->m_args.getInt32("svr_tran_socket");
 	__SocketCtx* ctx = __getSvrTranCtxBySocket(svr_tran_socket);
 	if (ctx == NULL)
 		return;
@@ -2189,7 +1808,7 @@ TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getClientCtxById(sock
 	return get_map_element_by_key(m_client_ctx_map, sid);
 }
 
-TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getClientCtxBySocket(int s)
+TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getClientCtxBySocket(socket_t s)
 {
 	for (CtxMap::iterator it = m_client_ctx_map.begin(); it != m_client_ctx_map.end(); ++it)
 	{
@@ -2204,7 +1823,7 @@ TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrListenCtxById(s
 	return get_map_element_by_key(m_svr_listen_ctx_map, sid);
 }
 
-TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrListenCtxBySocket(int s)
+TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrListenCtxBySocket(socket_t s)
 {
 	for (CtxMap::iterator it = m_svr_listen_ctx_map.begin(); it != m_svr_listen_ctx_map.end(); ++it)
 	{
@@ -2219,7 +1838,7 @@ TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrTranCtxById(soc
 	return get_map_element_by_key(m_svr_tran_ctx_map, sid);
 }
 
-TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrTranCtxBySocket(int s)
+TcpSocketCallbackApi::__SocketCtx* TcpSocketCallbackApi::__getSvrTranCtxBySocket(socket_t s)
 {
 	for (CtxMap::iterator it = m_svr_tran_ctx_map.begin(); it != m_svr_tran_ctx_map.end(); ++it)
 	{

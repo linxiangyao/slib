@@ -14,6 +14,7 @@ auto retry send pack.
 provide timeout funtion.
 provide priority funtion.
 flow limity.
+dns
 network speed test, choice fastest svr.
 
 
@@ -172,8 +173,11 @@ public:
 	public:
 		InitParam()
 		{ 
-			m_work_looper = NULL;
-			m_sapi = NULL;
+			m_work_looper = nullptr;
+			m_callback = nullptr;
+			m_sapi = nullptr;
+			m_unpacker = nullptr;
+			m_dns_resolver = nullptr;
 			m_connect_interval_mss.push_back(1);
 			m_connect_interval_mss.push_back(1*1000);
 			m_connect_interval_mss.push_back(2 * 1000);
@@ -181,15 +185,15 @@ public:
 			m_connect_interval_mss.push_back(4 * 1000);
 			m_connect_interval_mss.push_back(5 * 1000);
 			m_is_repeat_last_connect_interval_ms = true;
-			m_callback = nullptr;
 			m_max_pack_count = 1000;
 		}
 
 		MessageLooper* m_work_looper;
 		ICallback* m_callback;
+		ITcpSocketCallbackApi* m_sapi;
+		DnsResolver* m_dns_resolver;
 		std::vector<SvrInfo> m_svr_infos;
 		std::map<uint32_t, ClientCgiInfo> m_send_cmd_type_to_cgi_info_map;
-		ITcpSocketCallbackApi* m_sapi;
 		IUnpacker* m_unpacker;
 		std::vector<int32_t> m_connect_interval_mss;
 		bool m_is_repeat_last_connect_interval_ms;
@@ -275,6 +279,7 @@ private:
 		int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
 
 
+		std::string m_svr_ip_or_name;
 		std::string m_svr_ip;
 		uint32_t m_svr_port;
 		socket_id_t m_sid;
@@ -319,8 +324,9 @@ private:
 	bool m_is_running;
 	uint64_t m_timer_id;
 
+	DnsResolver* m_dns_resolver;
+
 	ClientNetSpeedTester* m_speed_tester;
-	std::map<std::string, ClientNetSpeedTester::TestResult> m_speed_test_results;
 	bool m_is_testing_speed;
 
 	std::vector<int32_t> m_connect_interval_mss;

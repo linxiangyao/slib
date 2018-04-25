@@ -143,7 +143,7 @@ bool ServerNetwork::start()
 	ITcpSocketCallbackApi::CreateSvrSocketParam param;
 	param.m_callback_looper = m_init_param.m_work_looper;
 	param.m_callback_target = this;
-	param.m_svr_ip_or_name = m_init_param.m_svr_ip_or_name;
+	param.m_svr_ip = m_init_param.m_svr_ip_or_name;
 	param.m_svr_port = m_init_param.m_svr_port;
 	if (!m_init_param.m_sapi->createSvrListenSocket(&m_listen_sid, param))
 	{

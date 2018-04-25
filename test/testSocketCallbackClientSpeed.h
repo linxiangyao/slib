@@ -55,7 +55,7 @@ private:
 		ITcpSocketCallbackApi::CreateClientSocketParam param;
 		param.m_callback_looper = &m_console_api->getMessageLooper();
 		param.m_callback_target = this;
-		param.m_svr_ip_or_name = "127.0.0.1";
+		param.m_svr_ip = "127.0.0.1";
 		param.m_svr_port = 12306;
 		if (!m_sapi->createClientSocket(&m_sid, param))
 		{

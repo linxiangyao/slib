@@ -16,14 +16,19 @@ ClientNetwork::ClientNetwork()
 
 	m_speed_tester = NULL;
 	m_is_testing_speed = false;
+
+	m_dns_resolver = nullptr;
 }
 
 ClientNetwork::~ClientNetwork()
 {
 	slog_d("delete ClientNetwork=%0", (uint64_t)this);
 	stop();
+	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_sapi->releaseClientSocket(m_client_ctx.m_sid);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
+	delete m_speed_tester;
+	delete m_dns_resolver;
 }
 
 bool ClientNetwork::init(const InitParam& param)
@@ -36,9 +41,49 @@ bool ClientNetwork::init(const InitParam& param)
 		return false;
 	}
 	m_init_param = param;
+
 	m_connect_interval_mss = m_init_param.m_connect_interval_mss;
 	m_timer_id = m_init_param.m_work_looper->createTimer(NULL);
 	m_client_ctx.m_init_param = &m_init_param;
+	
+	// dns_resolver
+	{
+		if (m_init_param.m_dns_resolver == nullptr)
+		{
+			m_dns_resolver = new DnsResolver();
+			if (!m_dns_resolver->init(m_init_param.m_work_looper))
+				return false;
+			m_init_param.m_dns_resolver = m_dns_resolver;
+		}
+		m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
+	}
+
+	// speed_tester
+	{
+		std::vector<ClientNetSpeedTester::SvrInfo> svr_infos;
+		for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
+		{
+			ClientNetSpeedTester::SvrInfo svr_info;
+			svr_info.m_svr_ip_or_name = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
+			svr_info.m_svr_port = m_init_param.m_svr_infos[i].m_svr_port;
+			svr_infos.push_back(svr_info);
+		}
+
+		ClientNetSpeedTester::InitParam p;
+		p.m_notify_looper = m_init_param.m_work_looper;
+		p.m_notify_target = this;
+		p.m_work_looper = m_init_param.m_work_looper;
+		p.m_sapi = m_init_param.m_sapi;
+		p.m_dns_resolver = m_init_param.m_dns_resolver;
+		p.m_svr_infos = svr_infos;
+
+		m_speed_tester = new ClientNetSpeedTester();
+		if (!m_speed_tester->init(p))
+		{
+			slog_e("ClientNetwork::init fail to m_speed_tester->init");
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -56,39 +101,10 @@ bool ClientNetwork::start()
 	m_init_param.m_work_looper->addMsgHandler(this);
 	m_init_param.m_work_looper->addMsgTimerHandler(this);
 
+	if (!__doTestSvrSpeed())
 	{
-		if (m_speed_tester != NULL)
-		{
-			slog_e("ClientNetwork::start fail, m_speed_tester != NULL");
-			return false;
-		}
-		m_speed_tester = new ClientNetSpeedTester();
-		std::vector<ClientNetSpeedTester::SvrInfo> svr_infos;
-		for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
-		{
-			ClientNetSpeedTester::SvrInfo svr_info;
-			svr_info.m_svr_ip_or_name = m_init_param.m_svr_infos[i].m_svr_ip_or_name;
-			svr_info.m_svr_port = m_init_param.m_svr_infos[i].m_svr_port;
-			svr_info.m_send_count = 0;
-			svr_infos.push_back(svr_info);
-		}
-		ClientNetSpeedTester::InitParam p;
-		p.m_notify_looper = m_init_param.m_work_looper;
-		p.m_notify_target = this;
-		p.m_work_looper = m_init_param.m_work_looper;
-		p.m_sapi = m_init_param.m_sapi;
-		p.m_svr_infos = svr_infos;
-		if (!m_speed_tester->init(p))
-		{
-			slog_e("ClientNetwork::start fail to m_speed_tester->init");
-			return false;
-		}
-
-		if (!__doTestSvrSpeed())
-		{
-			slog_e("ClientNetwork::start fail to __doTestSvrSpeed");
-			return false;
-		}
+		slog_e("ClientNetwork::start fail to __doTestSvrSpeed");
+		return false;
 	}
 	
 	if (!m_init_param.m_work_looper->startTimer(m_timer_id, 1, 1))
@@ -117,8 +133,7 @@ void ClientNetwork::stop()
 	m_init_param.m_work_looper->removeMessagesByTarget(this);
 
 	m_init_param.m_work_looper->stopTimer(m_timer_id);
-	
-	m_speed_test_results.clear();
+
 
 	//m_client_ctx.resetConnectState();
 	//delete_and_erase_collection_elements(&m_send_pack_infos);
@@ -234,7 +249,7 @@ void ClientNetwork::onMessage(Message * msg, bool* isHandled)
 		switch (msg->m_msg_type)
 		{
 		case ClientNetSpeedTester::EMsgType_onTestStart: __onMsgNetSpeedTestStart(msg); break;
-		case ClientNetSpeedTester::EMsgType_onOneSvrResultUpdate: __onMsgNetSpeedTestResultUpdate(msg); break;
+		case ClientNetSpeedTester::EMsgType_onOneTestResult: __onMsgNetSpeedTestResultUpdate(msg); break;
 		case ClientNetSpeedTester::EMsgType_onTestEnd: __onMsgNetSpeedTestEnd(msg); break;
 		}
 		return;
@@ -279,7 +294,7 @@ void ClientNetwork::__onMsgTcpSocketClientConnected(ITcpSocketCallbackApi::Clien
 {
 	if (msg->m_client_sid != m_client_ctx.m_sid)
 		return;
-	slog_d("connected, svr_ip=%0, svr_port=%1", m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
+	slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_client_ctx.m_svr_ip_or_name, m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
 
 	m_connect_count = 0;
 	m_client_ctx.onConnected();
@@ -291,7 +306,7 @@ void ClientNetwork::__onMsgTcpSocketClientDisconnected(ITcpSocketCallbackApi::Cl
 {
 	if (msg->m_client_sid != m_client_ctx.m_sid)
 		return;
-	slog_d("disconnected, svr_ip=%0, svr_port=%1", m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
+	slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_client_ctx.m_svr_ip_or_name, m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
 
 	m_client_ctx.onDisconnected();
 
@@ -376,18 +391,16 @@ void ClientNetwork::__onMsgNetSpeedTestEnd(Message * msg)
 void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 {
 	slog_v("ClientNetwork::SpeedTestReultUpdate");
-	ClientNetSpeedTester::TestResult r;
-	ClientNetSpeedTester::parseTestResultFromMsg(&r, msg);
-	m_speed_test_results[r.m_svr_ip_or_name + StringUtil::toString(r.m_svr_port)] = r;
+	ClientNetSpeedTester::Msg_oneTestResult* m = (ClientNetSpeedTester::Msg_oneTestResult*)msg;
 
-	int index = __getSvrInfoIndexBySvrIpAndPort(r.m_svr_ip_or_name, r.m_svr_port);
+	int index = __getSvrInfoIndexBySvrIpAndPort(m->m_svr_ip_or_name, m->m_svr_port);
 	if (index < 0)
 		return;
 	SvrInfo* svr_info = &(m_init_param.m_svr_infos[index]);
 	if (m_client_ctx.m_sid != 0)
 		return;
 
-	if (!r.m_is_connected)
+	if (!m->m_is_connected)
 		return;
 
 	m_speed_tester->stop();
@@ -397,12 +410,13 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 	ITcpSocketCallbackApi::CreateClientSocketParam param;
 	param.m_callback_looper = m_init_param.m_work_looper;
 	param.m_callback_target = this;
-	param.m_svr_ip_or_name = svr_info->m_svr_ip_or_name;
-	param.m_svr_port = svr_info->m_svr_port;
+	param.m_svr_ip = m->m_svr_ip_str;
+	param.m_svr_port = m->m_svr_port;
 	if (!m_init_param.m_sapi->createClientSocket(&m_client_ctx.m_sid, param))
 		return;
-	m_client_ctx.m_svr_ip = svr_info->m_svr_ip_or_name;
-	m_client_ctx.m_svr_port = svr_info->m_svr_port;
+	m_client_ctx.m_svr_ip_or_name = m->m_svr_ip_or_name;
+	m_client_ctx.m_svr_ip = m->m_svr_ip_str;
+	m_client_ctx.m_svr_port = m->m_svr_port;
 	__doConnectTcpSvr();
 }
 
@@ -440,7 +454,7 @@ bool ClientNetwork::__doConnectTcpSvr()
 	}
 
 	// connect fasterst svr
-	slog_d("doConnectTcpSvr, svr_ip=%0, svr_port=%1", m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
+	slog_d("doConnectTcpSvr, svr_name=%0, svr_ip=%1, svr_port=%2", m_client_ctx.m_svr_ip_or_name, m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
 	if (!m_init_param.m_sapi->startClientSocket(m_client_ctx.m_sid))
 	{
 		slog_e("fail to startClientSocket");
@@ -455,7 +469,7 @@ bool ClientNetwork::__doTestSvrSpeed()
 {
 	if (!m_speed_tester->start())
 	{
-		slog_e("fail to m_speed_tester->start");
+		slog_e("ClientNetwork::__doTestSvrSpeed fail to m_speed_tester->start");
 		return false;
 	}
 	m_is_testing_speed = true;

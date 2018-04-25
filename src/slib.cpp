@@ -11,7 +11,10 @@
 #include "thread/messageLoopThread.cpp"
 #include "console/consoleApp.cpp"
 
+#include "socket/socketApi.cpp"
+#include "socket/dnsResolver.cpp"
 #include "socket/linux/socketApi_linux.cpp"
+
 
 #include "network/client/clientNetSpeedTester.cpp"
 #include "network/client/clientNetwork.cpp"
