@@ -294,7 +294,7 @@ void ClientNetwork::__onMsgTcpSocketClientConnected(ITcpSocketCallbackApi::Clien
 {
 	if (msg->m_client_sid != m_client_ctx.m_sid)
 		return;
-	slog_d("connected, svr_ip=%0, svr_port=%1", m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
+	slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_client_ctx.m_svr_ip_or_name, m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
 
 	m_connect_count = 0;
 	m_client_ctx.onConnected();
@@ -306,7 +306,7 @@ void ClientNetwork::__onMsgTcpSocketClientDisconnected(ITcpSocketCallbackApi::Cl
 {
 	if (msg->m_client_sid != m_client_ctx.m_sid)
 		return;
-	slog_d("disconnected, svr_ip=%0, svr_port=%1", m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
+	slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_client_ctx.m_svr_ip_or_name, m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
 
 	m_client_ctx.onDisconnected();
 
@@ -410,12 +410,13 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 	ITcpSocketCallbackApi::CreateClientSocketParam param;
 	param.m_callback_looper = m_init_param.m_work_looper;
 	param.m_callback_target = this;
-	param.m_svr_ip = svr_info->m_svr_ip_or_name;
-	param.m_svr_port = svr_info->m_svr_port;
+	param.m_svr_ip = m->m_svr_ip_str;
+	param.m_svr_port = m->m_svr_port;
 	if (!m_init_param.m_sapi->createClientSocket(&m_client_ctx.m_sid, param))
 		return;
-	m_client_ctx.m_svr_ip = svr_info->m_svr_ip_or_name;
-	m_client_ctx.m_svr_port = svr_info->m_svr_port;
+	m_client_ctx.m_svr_ip_or_name = m->m_svr_ip_or_name;
+	m_client_ctx.m_svr_ip = m->m_svr_ip_str;
+	m_client_ctx.m_svr_port = m->m_svr_port;
 	__doConnectTcpSvr();
 }
 
@@ -453,7 +454,7 @@ bool ClientNetwork::__doConnectTcpSvr()
 	}
 
 	// connect fasterst svr
-	slog_d("doConnectTcpSvr, svr_ip=%0, svr_port=%1", m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
+	slog_d("doConnectTcpSvr, svr_name=%0, svr_ip=%1, svr_port=%2", m_client_ctx.m_svr_ip_or_name, m_client_ctx.m_svr_ip.c_str(), m_client_ctx.m_svr_port);
 	if (!m_init_param.m_sapi->startClientSocket(m_client_ctx.m_sid))
 	{
 		slog_e("fail to startClientSocket");

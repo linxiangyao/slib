@@ -279,6 +279,7 @@ private:
 		int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
 
 
+		std::string m_svr_ip_or_name;
 		std::string m_svr_ip;
 		uint32_t m_svr_port;
 		socket_id_t m_sid;
