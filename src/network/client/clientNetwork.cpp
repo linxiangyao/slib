@@ -22,6 +22,75 @@ enum ClientNetwork::__EConnectState
 };
 
 
+
+// Msg ---------------------------------------------------------------------------------------------
+class ClientNetwork::__Msg_notifyConectStateChanged : public Message
+{
+public:
+	__Msg_notifyConectStateChanged(__EConnectState connect_state)
+	{
+		m_msg_type = __EMsgType_notifyConectStateChanged; 
+		m_connect_state = connect_state;
+	}
+
+	__EConnectState m_connect_state;
+};
+
+class ClientNetwork::__Msg_notifyRecvS2cPushPack : public Message
+{
+public:
+	__Msg_notifyRecvS2cPushPack(RecvPack* recv_pack)
+	{
+		m_msg_type = __EMsgType_notifyRecvS2cPushPack;
+		m_recv_pack = recv_pack;
+	}
+
+	~__Msg_notifyRecvS2cPushPack()
+	{
+		delete m_recv_pack;
+	}
+
+	RecvPack* m_recv_pack;
+};
+
+class ClientNetwork::__Msg_notifyRecvS2cReqPack : public Message
+{
+public:
+	__Msg_notifyRecvS2cReqPack(RecvPack* recv_pack)
+	{
+		m_msg_type = __EMsgType_notifyRecvS2cReqPack;
+		m_recv_pack = recv_pack;
+	}
+
+	~__Msg_notifyRecvS2cReqPack()
+	{
+		delete m_recv_pack;
+	}
+
+	RecvPack* m_recv_pack;
+};
+
+class ClientNetwork::__Msg_notifyCgiDone : public Message
+{
+public:
+	__Msg_notifyCgiDone(ClientCgi* cgi)
+	{
+		m_msg_type = __EMsgType_notifyRecvS2cReqPack;
+		m_cgi = cgi;
+	}
+
+	~__Msg_notifyCgiDone()
+	{
+		delete m_cgi;
+	}
+
+	ClientCgi* m_cgi;
+};
+
+
+
+
+
 // ClientCgi ------------------------------------------------------------------------------------------
 void ClientNetwork::ClientCgi::setSendPack(SendPack * send_pack) 
 { 
@@ -343,6 +412,21 @@ void ClientNetwork::onMessage(Message * msg, bool* isHandled)
 		switch (msg->m_msg_type)
 		{
 		case __EMsgType_sendPack: __onMsgSendPack(msg); break;
+		case __EMsgType_notifyStarted: 
+			{
+				m_init_param.m_callback->onClientNetwork_started(this);
+				break;
+			}
+		case __EMsgType_notifyStopped:
+		{
+			m_init_param.m_callback->onClientNetwork_started(this);
+			break;
+		}
+		case __EMsgType_notifyConectStateChanged:
+		{
+			m_init_param.m_callback->onClientNetwork_started(this);
+			break;
+		}
 		}
 	}
 	else if (msg->m_sender == m_init_param.m_sapi)

@@ -226,7 +226,7 @@ public:
 
 private:
 	class __Msg_notifyConectStateChanged;
-	class __Msg_notifyRecvS2cReqPack;
+	class __Msg_notifyRecvS2cPushPack;
 	class __Msg_notifyRecvS2cReqPack;
 	class __Msg_notifyCgiDone;
 	class __CgiCtx;
