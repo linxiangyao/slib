@@ -259,36 +259,54 @@ private:
 		__ClientCtx();
 		~__ClientCtx();
 
-		void addCgi(ClientCgi* cgi);
+		void init(InitParam* param, ClientNetwork* network);
+		bool start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port);
+		void stop();
+		bool connect();
+		bool startCgi(ClientCgi* cgi);
 		void cancelCgi(ClientCgi* cgi);
-		bool doSendPack();
+		bool sendPack();
 		void checkTimeOutPacks();
-		int getCgiIndexBySendPackId(uint64_t send_pack_id);
-		size_t getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
+		socket_id_t getSid();
 
-		void onSendPackEnd();
+		void onSendDataEnd();
+		void onRecvData(const Binary& recv_data);
 		void onConnected();
 		void onDisconnected();
-		void onRecvPack(RecvPack* recv_pack);
 
 
+
+	private:
+		void __onRecvPack(RecvPack* recv_pack);
 		void __resetConnectState();
+		void __addCgi(ClientCgi* cgi);
 		void __markCgiDoneByIndex(int index, EErrType err_type, int err_code);
+		bool __isTimeToConnect();
+		uint64_t __getConnectIntervalMs(size_t connect_count);
 		int __getMaxPrioryCgiIndex();
-		ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
+		int __getCgiIndexBySendPackId(uint64_t send_pack_id);
 		int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
+		size_t __getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
+		ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
 
+
+		InitParam* m_init_param;
+		ClientNetwork* m_network;
 
 		std::string m_svr_ip_or_name;
 		std::string m_svr_ip;
 		uint32_t m_svr_port;
 		socket_id_t m_sid;
 		__EConnectState m_connect_state;
-		int m_sending_cgi_index;
+		std::vector<int32_t> m_connect_interval_mss;
+		bool m_is_repeat_last_connect_interval_ms;
+		uint64_t m_last_reconnect_time_ms;
+		size_t m_connect_count;
+
 		Binary m_recv_data;
+
+		int m_sending_cgi_index;
 		std::vector<__CgiCtx*> m_cgi_ctxs;
-		InitParam* m_init_param;
-		ClientNetwork* m_network;
 	};
 
 
@@ -312,8 +330,6 @@ private:
 	void __postSendPackMsgToSelf();
 	void __postMsgToSelf(Message* msg);
 
-	bool __isTimeToConnect();
-	uint64_t __getConnectIntervalMs(size_t connect_count);
 	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
 	ClientCgiInfo* __getClientCgiInfoBySendCmdType(uint32_t send_cmd_type);
 	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
@@ -328,12 +344,6 @@ private:
 
 	ClientNetSpeedTester* m_speed_tester;
 	bool m_is_testing_speed;
-
-	std::vector<int32_t> m_connect_interval_mss;
-	bool m_is_repeat_last_connect_interval_ms;
-	uint64_t m_last_reconnect_time_ms;
-	size_t m_connect_count;
-
 
 	__ClientCtx m_client_ctx;
 };
