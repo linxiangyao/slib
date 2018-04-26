@@ -32,6 +32,80 @@ void ClientNetwork::ClientCgi::setRecvPack(RecvPack * recv_pack)
 
 
 
+// __CgiCtx ------------------------------------------------------------------------------------------
+class ClientNetwork::__CgiCtx
+{
+public:
+	__CgiCtx() { m_is_sent = false; m_create_time = 0; m_cgi = nullptr; m_try_count = 0; }
+	~__CgiCtx() { }
+
+	bool m_is_sent;
+	uint64_t m_create_time;
+	ClientCgi* m_cgi;
+	size_t m_try_count;
+};
+
+
+
+
+// __ClientCtx ------------------------------------------------------------------------------------------
+class ClientNetwork::__ClientCtx
+{
+public:
+	__ClientCtx();
+	~__ClientCtx();
+
+	void init(InitParam* param, ClientNetwork* network);
+	bool start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port);
+	void stop();
+	bool connect();
+	bool startCgi(ClientCgi* cgi);
+	void cancelCgi(ClientCgi* cgi);
+	bool sendPack();
+	void checkTimeOutPacks();
+	socket_id_t getSid();
+
+	void onSendDataEnd();
+	void onRecvData(const Binary& recv_data);
+	void onConnected();
+	void onDisconnected();
+
+
+
+private:
+	void __onRecvPack(RecvPack* recv_pack);
+	void __resetConnectState();
+	void __addCgi(ClientCgi* cgi);
+	void __markCgiDoneByIndex(int index, EErrType err_type, int err_code);
+	bool __isTimeToConnect();
+	uint64_t __getConnectIntervalMs(size_t connect_count);
+	int __getMaxPrioryCgiIndex();
+	int __getCgiIndexBySendPackId(uint64_t send_pack_id);
+	int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
+	size_t __getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
+	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
+
+
+	InitParam* m_init_param;
+	ClientNetwork* m_network;
+
+	std::string m_svr_ip_or_name;
+	std::string m_svr_ip;
+	uint32_t m_svr_port;
+	socket_id_t m_sid;
+	__EConnectState m_connect_state;
+	std::vector<int32_t> m_connect_interval_mss;
+	bool m_is_repeat_last_connect_interval_ms;
+	uint64_t m_last_reconnect_time_ms;
+	size_t m_connect_count;
+
+	Binary m_recv_data;
+
+	int m_sending_cgi_index;
+	std::vector<__CgiCtx*> m_cgi_ctxs;
+};
+
+
 
 
 
@@ -43,8 +117,9 @@ ClientNetwork::ClientNetwork()
 	m_is_running = false;
 	m_timer_id = 0;
 
+	m_client_ctx = nullptr;
 
-	m_speed_tester = NULL;
+	m_speed_tester = nullptr;
 	m_is_testing_speed = false;
 
 	m_dns_resolver = nullptr;
@@ -57,6 +132,7 @@ ClientNetwork::~ClientNetwork()
 	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
 	m_init_param.m_work_looper->removeMessagesBySender(this);
+	delete m_client_ctx;
 	delete m_speed_tester;
 	delete m_dns_resolver;
 }
@@ -73,7 +149,8 @@ bool ClientNetwork::init(const InitParam& param)
 	m_init_param = param;
 
 	m_timer_id = m_init_param.m_work_looper->createTimer(NULL);
-	m_client_ctx.init(&m_init_param, this);
+	m_client_ctx = new __ClientCtx();
+	m_client_ctx->init(&m_init_param, this);
 	
 	// dns_resolver
 	{
@@ -156,7 +233,7 @@ void ClientNetwork::stop()
 	m_init_param.m_work_looper->removeMsgHandler(this);
 	m_init_param.m_work_looper->removeMsgTimerHandler(this);
 
-	m_client_ctx.stop();
+	m_client_ctx->stop();
 	m_speed_tester->stop();
 
 	m_init_param.m_work_looper->removeMessagesBySender(this);
@@ -203,7 +280,7 @@ bool ClientNetwork::startCgi(ClientCgi * cgi)
 		return false;
 	}
 
-	if (!m_client_ctx.startCgi(cgi))
+	if (!m_client_ctx->startCgi(cgi))
 		return false;
 
 	__postSendPackMsgToSelf();
@@ -213,7 +290,7 @@ bool ClientNetwork::startCgi(ClientCgi * cgi)
 void ClientNetwork::stopCgi(ClientCgi * cgi)
 {
 	slog_v("stop cgi, cgi=%0", (uint64_t)cgi);
-	m_client_ctx.cancelCgi(cgi);
+	m_client_ctx->cancelCgi(cgi);
 }
 
 
@@ -270,42 +347,42 @@ void ClientNetwork::onMessageTimerTick(uint64_t timer_id, void* user_data)
 		return;
 
 	__doConnectTcpSvr();
-	m_client_ctx.checkTimeOutPacks();
+	m_client_ctx->checkTimeOutPacks();
 }
 
 void ClientNetwork::__onMsgSendPack(Message * msg)
 {
-	m_client_ctx.sendPack();
+	m_client_ctx->sendPack();
 }
 
 void ClientNetwork::__onMsgTcpSocketClientConnected(ITcpSocketCallbackApi::ClientSocketConnectedMsg * msg)
 {
-	if (msg->m_client_sid != m_client_ctx.getSid())
+	if (msg->m_client_sid != m_client_ctx->getSid())
 		return;
 
-	m_client_ctx.onConnected();
+	m_client_ctx->onConnected();
 }
 
 void ClientNetwork::__onMsgTcpSocketClientDisconnected(ITcpSocketCallbackApi::ClientSocketDisconnectedMsg * msg)
 {
-	if (msg->m_client_sid != m_client_ctx.getSid())
+	if (msg->m_client_sid != m_client_ctx->getSid())
 		return;
 
-	m_client_ctx.onDisconnected();
+	m_client_ctx->onDisconnected();
 }
 
 void ClientNetwork::__onMsgTcpSocketClientSendDataEnd(ITcpSocketCallbackApi::ClientSocketSendDataEndMsg * msg)
 {
-	if (msg->m_client_sid != m_client_ctx.getSid())
+	if (msg->m_client_sid != m_client_ctx->getSid())
 		return;
-	m_client_ctx.onSendDataEnd();
+	m_client_ctx->onSendDataEnd();
 }
 
 void ClientNetwork::__onMsgTcpSocketClientRecvData(ITcpSocketCallbackApi::ClientSocketRecvDataMsg * msg)
 {
-	if (msg->m_client_sid != m_client_ctx.getSid())
+	if (msg->m_client_sid != m_client_ctx->getSid())
 		return;
-	m_client_ctx.onRecvData(msg->m_recv_data);
+	m_client_ctx->onRecvData(msg->m_recv_data);
 }
 
 void ClientNetwork::__onMsgNetSpeedTestStart(Message * msg)
@@ -329,7 +406,7 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 	if (index < 0)
 		return;
 	SvrInfo* svr_info = &(m_init_param.m_svr_infos[index]);
-	if (m_client_ctx.getSid() != 0)
+	if (m_client_ctx->getSid() != 0)
 		return;
 
 	if (!m->m_is_connected)
@@ -338,7 +415,7 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 	m_speed_tester->stop();
 
 	// init client and connect
-	m_client_ctx.start(m->m_svr_ip_or_name, m->m_svr_ip_str, m->m_svr_port);
+	m_client_ctx->start(m->m_svr_ip_or_name, m->m_svr_ip_str, m->m_svr_port);
 }
 
 
@@ -353,7 +430,7 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 bool ClientNetwork::__doConnectTcpSvr()
 {
 	// find out the fastest svr
-	if (m_client_ctx.getSid() == 0)
+	if (m_client_ctx->getSid() == 0)
 	{
 		if (m_is_testing_speed)
 		{
@@ -364,7 +441,7 @@ bool ClientNetwork::__doConnectTcpSvr()
 		return __doTestSvrSpeed();
 	}
 
-	bool is_ok = m_client_ctx.connect();
+	bool is_ok = m_client_ctx->connect();
 	return is_ok;
 }
 

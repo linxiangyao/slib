@@ -225,104 +225,42 @@ public:
 
 
 private:
+	class __Msg_notifyConectStateChanged;
+	class __Msg_notifyRecvS2cReqPack;
+	class __Msg_notifyRecvS2cReqPack;
+	class __Msg_notifyCgiDone;
+	class __CgiCtx;
+	class __ClientCtx;
+
 	enum __EMsgType
 	{
-		__EMsgType_sendPack,
-
-		__EmsgType_onNetworkStateChanged,
-		__EmsgType_onForgroundChanged,
-
-		__EMsgType_onTcpSocketClientConnected,
-		__EMsgType_onTcpSocketClientDisconnected,
-		__EMsgType_onTcpSocketClientSendDataEnd,
-		__EMsgType_onTcpSocketClientRecvData,
+		__EMsgType_sendPack = 19837811,
+		__EMsgType_notifyStarted,
+		__EMsgType_notifyStopped,
+		__EMsgType_notifyConectStateChanged,
+		__EMsgType_notifyRecvS2cPushPack,
+		__EMsgType_notifyRecvS2cReqPack,
+		__EMsgType_notifyCgiDone,
 	};
-	
+
 	enum __EConnectState
 	{
 		__EConnectState_connecting,
 		__EConnectState_connected,
 		__EConnectState_disconnected,
 	};
-
-	class __CgiCtx
-	{
-	public:
-		__CgiCtx() { m_is_sent = false; m_create_time = 0; m_cgi = nullptr; m_try_count = 0; }
-		~__CgiCtx() { }
-
-		bool m_is_sent;
-		uint64_t m_create_time;
-		ClientCgi* m_cgi;
-		size_t m_try_count;
-	};
 	
-	class __ClientCtx
-	{
-	public:
-		__ClientCtx();
-		~__ClientCtx();
+	
 
-		void init(InitParam* param, ClientNetwork* network);
-		bool start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port);
-		void stop();
-		bool connect();
-		bool startCgi(ClientCgi* cgi);
-		void cancelCgi(ClientCgi* cgi);
-		bool sendPack();
-		void checkTimeOutPacks();
-		socket_id_t getSid();
-
-		void onSendDataEnd();
-		void onRecvData(const Binary& recv_data);
-		void onConnected();
-		void onDisconnected();
-
-
-
-	private:
-		void __onRecvPack(RecvPack* recv_pack);
-		void __resetConnectState();
-		void __addCgi(ClientCgi* cgi);
-		void __markCgiDoneByIndex(int index, EErrType err_type, int err_code);
-		bool __isTimeToConnect();
-		uint64_t __getConnectIntervalMs(size_t connect_count);
-		int __getMaxPrioryCgiIndex();
-		int __getCgiIndexBySendPackId(uint64_t send_pack_id);
-		int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
-		size_t __getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
-		ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
-
-
-		InitParam* m_init_param;
-		ClientNetwork* m_network;
-
-		std::string m_svr_ip_or_name;
-		std::string m_svr_ip;
-		uint32_t m_svr_port;
-		socket_id_t m_sid;
-		__EConnectState m_connect_state;
-		std::vector<int32_t> m_connect_interval_mss;
-		bool m_is_repeat_last_connect_interval_ms;
-		uint64_t m_last_reconnect_time_ms;
-		size_t m_connect_count;
-
-		Binary m_recv_data;
-
-		int m_sending_cgi_index;
-		std::vector<__CgiCtx*> m_cgi_ctxs;
-	};
 
 
 	virtual void onMessage(Message * msg, bool* isHandled) override;
 	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override;
-
 	void __onMsgSendPack(Message* msg);
 	void __onMsgTcpSocketClientConnected(ITcpSocketCallbackApi::ClientSocketConnectedMsg* msg);
 	void __onMsgTcpSocketClientDisconnected(ITcpSocketCallbackApi::ClientSocketDisconnectedMsg* msg);
 	void __onMsgTcpSocketClientSendDataEnd(ITcpSocketCallbackApi::ClientSocketSendDataEndMsg* msg);
 	void __onMsgTcpSocketClientRecvData(ITcpSocketCallbackApi::ClientSocketRecvDataMsg* msg);
-
 	void __onMsgNetSpeedTestStart(Message* msg);
 	void __onMsgNetSpeedTestEnd(Message* msg);
 	void __onMsgNetSpeedTestResultUpdate(Message* msg);
@@ -335,9 +273,9 @@ private:
 	void __postMsgToSelf(Message* msg);
 	void __notifyStarted();
 	void __notifyStopped();
+	void __notifyConnectStateChanged(EConnectState state);
 	void __notifyRecvS2cPushPack(RecvPack* recv_pack);
 	void __notifyRecvS2cReqPack(RecvPack* recv_pack);
-	void __notifyConnectStateChanged(EConnectState state);
 	void __notifyCgiDone(ClientCgi* cgi);
 	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
 	ClientCgiInfo* __getClientCgiInfoBySendCmdType(uint32_t send_cmd_type);
@@ -348,13 +286,10 @@ private:
 	InitParam m_init_param;
 	bool m_is_running;
 	uint64_t m_timer_id;
-
 	DnsResolver* m_dns_resolver;
-
 	ClientNetSpeedTester* m_speed_tester;
 	bool m_is_testing_speed;
-
-	__ClientCtx m_client_ctx;
+	__ClientCtx* m_client_ctx;
 };
 
 
