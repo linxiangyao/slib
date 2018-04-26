@@ -139,6 +139,7 @@ void DnsResolver::stop()
 	slog_d("DnsResolver stop");
 	ScopeMutex _l(m_mutex);
 	delete_and_erase_collection_elements(&m_resolve_threads);
+	m_env_loop->removeMessagesBySender(this);
 }
 
 bool DnsResolver::addNotifyLooper(MessageLooper * notify_loop)

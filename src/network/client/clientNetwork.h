@@ -113,7 +113,7 @@ public:
 	class ClientCgi
 	{
 	public:
-		ClientCgi() { m_send_pack = nullptr; m_recv_pack = nullptr; m_err_type = EErrType_ok; m_err_code = 0; m_start_ms = 0; m_end_ms = 0; }
+		ClientCgi() { m_send_pack = nullptr; m_recv_pack = nullptr; m_err_type = EErrType_ok; m_err_code = 0; m_start_ms = 0; m_end_ms = 0; m_max_try_count = 1; }
 		virtual ~ClientCgi() { delete m_send_pack; delete m_recv_pack; }
 
 		virtual const ClientCgiInfo& getCgiInfo() const = 0;
@@ -126,6 +126,7 @@ public:
 		bool		getIsSuccess() { return getErrType() == EErrType_ok && getErrCode() == 0; }
 		uint64_t	getStartMs() { return m_start_ms; }
 		uint64_t	getEndMs() { return m_end_ms; }
+		uint32_t	getMaxTryCount() { return m_max_try_count; }
 
 		void		setSendPack(SendPack* send_pack);
 		void		setRecvPack(RecvPack* recv_pack);
@@ -133,6 +134,7 @@ public:
 		void		setErrCode(int err_code) { m_err_code = err_code; }
 		void		setStartMs(uint64_t ms) { m_start_ms = ms; }
 		void		setEndMs(uint64_t ms) { m_end_ms = ms; }
+		void		setMaxTryCount(uint32_t max_try_count) { m_max_try_count = max_try_count; }
 
 
 	protected:
@@ -146,13 +148,14 @@ public:
 		int m_err_code;
 		uint64_t m_start_ms;
 		uint64_t m_end_ms;
+		uint32_t m_max_try_count;
 	};
 
 	class ICallback
 	{
 	public:
 		virtual ~ICallback() {}
-		virtual void onClientNetwork_statred(ClientNetwork* network) = 0;
+		virtual void onClientNetwork_started(ClientNetwork* network) = 0;
 		virtual void onClientNetwork_stopped(ClientNetwork* network) = 0;
 		virtual void onClientNetwork_connectStateChanged(ClientNetwork* network, EConnectState state) = 0;
 		virtual void onClientNetwork_recvS2cPushPack(ClientNetwork* network, std::unique_ptr<RecvPack>* recv_pack) = 0;
@@ -245,12 +248,13 @@ private:
 	class __CgiCtx
 	{
 	public:
-		__CgiCtx() { m_is_sent = false; m_create_time = 0; m_cgi = nullptr; }
+		__CgiCtx() { m_is_sent = false; m_create_time = 0; m_cgi = nullptr; m_try_count = 0; }
 		~__CgiCtx() { }
 
 		bool m_is_sent;
 		uint64_t m_create_time;
 		ClientCgi* m_cgi;
+		size_t m_try_count;
 	};
 	
 	class __ClientCtx
@@ -329,7 +333,12 @@ private:
 	bool __doTestSvrSpeed();
 	void __postSendPackMsgToSelf();
 	void __postMsgToSelf(Message* msg);
-
+	void __notifyStarted();
+	void __notifyStopped();
+	void __notifyRecvS2cPushPack(RecvPack* recv_pack);
+	void __notifyRecvS2cReqPack(RecvPack* recv_pack);
+	void __notifyConnectStateChanged(EConnectState state);
+	void __notifyCgiDone(ClientCgi* cgi);
 	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
 	ClientCgiInfo* __getClientCgiInfoBySendCmdType(uint32_t send_cmd_type);
 	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);

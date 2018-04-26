@@ -56,6 +56,7 @@ ClientNetwork::~ClientNetwork()
 	stop();
 	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
+	m_init_param.m_work_looper->removeMessagesBySender(this);
 	delete m_speed_tester;
 	delete m_dns_resolver;
 }
@@ -141,7 +142,7 @@ bool ClientNetwork::start()
 		return false;
 	}
 	
-	m_init_param.m_callback->onClientNetwork_statred(this);
+	__notifyStarted();
 	return true;
 }
 
@@ -158,11 +159,10 @@ void ClientNetwork::stop()
 	m_client_ctx.stop();
 	m_speed_tester->stop();
 
-	m_init_param.m_work_looper->removeMessagesByTarget(this);
-
+	m_init_param.m_work_looper->removeMessagesBySender(this);
 	m_init_param.m_work_looper->stopTimer(m_timer_id);
 
-	m_init_param.m_callback->onClientNetwork_stopped(this);
+	__notifyStopped();
 	slog_d("network stop end");
 }
 
@@ -393,6 +393,38 @@ void ClientNetwork::__postMsgToSelf(Message * msg)
 	m_init_param.m_work_looper->postMessage(msg);
 }
 
+void ClientNetwork::__notifyStarted()
+{
+	m_init_param.m_callback->onClientNetwork_started(this);
+}
+
+void ClientNetwork::__notifyStopped()
+{
+	m_init_param.m_callback->onClientNetwork_stopped(this);
+}
+
+void ClientNetwork::__notifyRecvS2cPushPack(RecvPack * recv_pack)
+{
+	std::unique_ptr<RecvPack> recv_pack_ap(recv_pack);
+	m_init_param.m_callback->onClientNetwork_recvS2cPushPack(this, &recv_pack_ap);
+}
+
+void ClientNetwork::__notifyRecvS2cReqPack(RecvPack * recv_pack)
+{
+	std::unique_ptr<RecvPack> recv_pack_ap(recv_pack);
+	m_init_param.m_callback->onClientNetwork_recvS2cReqPack(this, &recv_pack_ap);
+}
+
+void ClientNetwork::__notifyConnectStateChanged(EConnectState state)
+{
+	m_init_param.m_callback->onClientNetwork_connectStateChanged(this, EConnectState_connected);
+}
+
+void ClientNetwork::__notifyCgiDone(ClientCgi * cgi)
+{
+	m_init_param.m_callback->onClientNetwork_cgiDone(this, cgi);
+}
+
 int ClientNetwork::__getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot)
 {
 	for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
@@ -454,8 +486,8 @@ ClientNetwork::__ClientCtx::__ClientCtx()
 
 ClientNetwork::__ClientCtx::~__ClientCtx()
 {
+	stop();
 	delete_and_erase_collection_elements(&m_cgi_ctxs);
-	m_init_param->m_sapi->releaseClientSocket(m_sid);
 }
 
 void ClientNetwork::__ClientCtx::init(InitParam * param, ClientNetwork * network)
@@ -614,7 +646,9 @@ bool ClientNetwork::__ClientCtx::sendPack()
 	}
 
 	slog_d("send pack ok, cmd_type=%0, pack_data_len=%1, pack_len=%2", send_pack->m_send_cmd_type, send_pack->m_send_whole_pack_bin.getLen(), send_pack->m_send_whole_pack_bin.getLen());
+	m_cgi_ctxs[to_send_cgi_index]->m_try_count++;
 	m_sending_cgi_index = to_send_cgi_index;
+
 	return true;
 }
 
@@ -713,25 +747,37 @@ void ClientNetwork::__ClientCtx::onRecvData(const Binary & recv_data)
 void ClientNetwork::__ClientCtx::onConnected()
 {
 	slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
+	if (m_connect_state == __EConnectState_connected)
+		return;
+
 	m_connect_state = __EConnectState_connected;
 	m_connect_count = 0;
-	sendPack();
 
-	m_init_param->m_callback->onClientNetwork_connectStateChanged(m_network, EConnectState_connected);
+	sendPack();
+	m_network->__notifyConnectStateChanged(EConnectState_connected);
 }
 
 void ClientNetwork::__ClientCtx::onDisconnected()
 {
 	slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
+	if (m_connect_state == __EConnectState_disconnected)
+		return;
+
 	__resetConnectState();
 
-	//TODO: resend
 	for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
 	{
-		m_cgi_ctxs[i]->m_is_sent = false;
+		__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
+		cgi_ctx->m_is_sent = false;
+
+		if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount())
+		{
+			__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackSysErr);
+			--i;
+		}
 	}
 
-	m_init_param->m_callback->onClientNetwork_connectStateChanged(m_network, EConnectState_disconnected);
+	m_network->__notifyConnectStateChanged(EConnectState_disconnected);
 }
 
 
@@ -745,11 +791,11 @@ void ClientNetwork::__ClientCtx::__onRecvPack(RecvPack * recv_pack)
 	ClientCgiInfo* cgi_info = __getClientCgiInfoByRecvCmdType(recv_pack->m_recv_cmd_type);
 	if (cgi_info->m_cgi_type == EClientCgiType_s2cPush)
 	{
-		m_init_param->m_callback->onClientNetwork_recvS2cPushPack(m_network, &recv_pack_ap);
+		m_network->__notifyRecvS2cPushPack(recv_pack_ap.release());
 	}
 	else if (cgi_info->m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
 	{
-		m_init_param->m_callback->onClientNetwork_recvS2cReqPack(m_network, &recv_pack_ap);
+		m_network->__notifyRecvS2cReqPack(recv_pack_ap.release());
 	}
 	else if (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp)
 	{
@@ -761,6 +807,7 @@ void ClientNetwork::__ClientCtx::__onRecvPack(RecvPack * recv_pack)
 		}
 
 		m_cgi_ctxs[cgi_indx]->m_cgi->setRecvPack(recv_pack_ap.release());
+
 		__markCgiDoneByIndex(cgi_indx, EErrType_ok, 0);
 	}
 	else
@@ -792,19 +839,22 @@ void ClientNetwork::__ClientCtx::__markCgiDoneByIndex(int index, EErrType err_ty
 		return;
 
 	__CgiCtx* cgi_ctx = m_cgi_ctxs[index];
-	ClientCgi* cgi = m_cgi_ctxs[index]->m_cgi;
-	cgi->setErrType(err_type);
-	cgi->setErrCode(err_code);
-	cgi->setEndMs(TimeUtil::getMsTime());
-	if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cPush)
-	{
-		slog_e("onClientNetworkSendPackEnd invalid path");
-	}
-
-	slog_v("call back cgi=%0", (uint64_t)cgi);
 	m_cgi_ctxs.erase(m_cgi_ctxs.begin() + index);
-	m_init_param->m_callback->onClientNetwork_cgiDone(m_network, cgi);
+	ClientCgi* cgi = cgi_ctx->m_cgi;
 	delete cgi_ctx;
+
+	{
+		cgi->setErrType(err_type);
+		cgi->setErrCode(err_code);
+		cgi->setEndMs(TimeUtil::getMsTime());
+		if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cPush)
+		{
+			slog_e("ClientNetwork::__ClientCtx::__markCgiDoneByCgiCtx invalid path");
+		}
+
+		slog_v("call back cgi=%0", (uint64_t)cgi);
+		m_network->__notifyCgiDone(cgi);
+	}
 }
 
 bool ClientNetwork::__ClientCtx::__isTimeToConnect()
@@ -890,6 +940,10 @@ ClientCgiInfo* ClientNetwork::__ClientCtx::__getClientCgiInfoByRecvCmdType(uint3
 	}
 	return nullptr;
 }
+
+
+
+
 
 
 SCLIENT_NAMESPACE_END

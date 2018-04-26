@@ -81,7 +81,7 @@ protected:
 		printf("exit\n");
 	}
 
-	virtual void onClientNetwork_statred(ClientNetwork* network) override {}
+	virtual void onClientNetwork_started(ClientNetwork* network) override {}
 	virtual void onClientNetwork_stopped(ClientNetwork* network) override {}
 	virtual void onClientNetwork_connectStateChanged(ClientNetwork* network, ClientNetwork::EConnectState state) override {}
 	virtual void onClientNetwork_recvS2cPushPack(ClientNetwork* network, std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
@@ -199,7 +199,7 @@ protected:
 	}
 
 	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override {}
-	virtual void onClientNetwork_statred(ClientNetwork* network) override {}
+	virtual void onClientNetwork_started(ClientNetwork* network) override {}
 	virtual void onClientNetwork_stopped(ClientNetwork* network) override {}
 	virtual void onClientNetwork_connectStateChanged(ClientNetwork* network, ClientNetwork::EConnectState state) override {}
 	virtual void onClientNetwork_recvS2cPushPack(ClientNetwork* network, std::unique_ptr<ClientNetwork::RecvPack>* recv_pack) override {}
