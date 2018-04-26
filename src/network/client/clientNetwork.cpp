@@ -3,6 +3,25 @@
 SCLIENT_NAMESPACE_BEGIN
 
 
+enum ClientNetwork::__EMsgType
+{
+	__EMsgType_sendPack = 19837811,
+	__EMsgType_notifyStarted,
+	__EMsgType_notifyStopped,
+	__EMsgType_notifyConectStateChanged,
+	__EMsgType_notifyRecvS2cPushPack,
+	__EMsgType_notifyRecvS2cReqPack,
+	__EMsgType_notifyCgiDone,
+};
+
+enum ClientNetwork::__EConnectState
+{
+	__EConnectState_connecting,
+	__EConnectState_connected,
+	__EConnectState_disconnected,
+};
+
+
 // ClientCgi ------------------------------------------------------------------------------------------
 void ClientNetwork::ClientCgi::setSendPack(SendPack * send_pack) 
 { 
