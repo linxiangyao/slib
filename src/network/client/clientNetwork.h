@@ -254,15 +254,11 @@ private:
 	bool __doTestSvrSpeed();
 	void __postSendPackMsgToSelf();
 	void __postMsgToSelf(Message* msg);
-	void __notifyStarted();
-	void __notifyStopped();
-	void __notifyConnectStateChanged(EConnectState state);
-	void __notifyRecvS2cPushPack(RecvPack* recv_pack);
-	void __notifyRecvS2cReqPack(RecvPack* recv_pack);
-	void __notifyCgiDone(ClientCgi* cgi);
 	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
 	ClientCgiInfo* __getClientCgiInfoBySendCmdType(uint32_t send_cmd_type);
 	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
+	void __notifyStarted();
+	void __notifyStopped();
 
 
 

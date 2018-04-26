@@ -27,13 +27,13 @@ enum ClientNetwork::__EConnectState
 class ClientNetwork::__Msg_notifyConectStateChanged : public Message
 {
 public:
-	__Msg_notifyConectStateChanged(__EConnectState connect_state)
+	__Msg_notifyConectStateChanged(EConnectState connect_state)
 	{
 		m_msg_type = __EMsgType_notifyConectStateChanged; 
 		m_connect_state = connect_state;
 	}
 
-	__EConnectState m_connect_state;
+	EConnectState m_connect_state;
 };
 
 class ClientNetwork::__Msg_notifyRecvS2cPushPack : public Message
@@ -75,13 +75,12 @@ class ClientNetwork::__Msg_notifyCgiDone : public Message
 public:
 	__Msg_notifyCgiDone(ClientCgi* cgi)
 	{
-		m_msg_type = __EMsgType_notifyRecvS2cReqPack;
+		m_msg_type = __EMsgType_notifyCgiDone;
 		m_cgi = cgi;
 	}
 
 	~__Msg_notifyCgiDone()
 	{
-		delete m_cgi;
 	}
 
 	ClientCgi* m_cgi;
@@ -172,6 +171,11 @@ private:
 	int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
 	size_t __getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
 	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
+	void __postMsgToNetwork(Message* msg);
+	void __notifyConnectStateChanged(EConnectState state);
+	void __notifyRecvS2cPushPack(RecvPack* recv_pack);
+	void __notifyRecvS2cReqPack(RecvPack* recv_pack);
+	void __notifyCgiDone(ClientCgi* cgi);
 
 
 	InitParam* m_init_param;
@@ -411,22 +415,58 @@ void ClientNetwork::onMessage(Message * msg, bool* isHandled)
 	{
 		switch (msg->m_msg_type)
 		{
-		case __EMsgType_sendPack: __onMsgSendPack(msg); break;
-		case __EMsgType_notifyStarted: 
+		case __EMsgType_sendPack:
+			__onMsgSendPack(msg); 
+			break;
+		}
+	}
+	else if (msg->m_sender == m_client_ctx)
+	{
+		switch (msg->m_msg_type)
+		{
+		case __EMsgType_notifyStarted:
 			{
 				m_init_param.m_callback->onClientNetwork_started(this);
-				break;
 			}
+			break;
+
 		case __EMsgType_notifyStopped:
-		{
-			m_init_param.m_callback->onClientNetwork_started(this);
-			break;
-		}
+			{
+				m_init_param.m_callback->onClientNetwork_stopped(this);
+			}
+				break;
+
 		case __EMsgType_notifyConectStateChanged:
-		{
-			m_init_param.m_callback->onClientNetwork_started(this);
+			{
+				__Msg_notifyConectStateChanged* m = (__Msg_notifyConectStateChanged*)msg;
+				m_init_param.m_callback->onClientNetwork_connectStateChanged(this, m->m_connect_state);
+			}
 			break;
-		}
+
+		case __EMsgType_notifyRecvS2cPushPack:
+			{
+				__Msg_notifyRecvS2cPushPack* m = (__Msg_notifyRecvS2cPushPack*)msg;
+				std::unique_ptr<RecvPack> recv_pack(m->m_recv_pack);
+				m->m_recv_pack = nullptr;
+				m_init_param.m_callback->onClientNetwork_recvS2cPushPack(this, &recv_pack);
+			}
+			break;
+
+		case __EMsgType_notifyRecvS2cReqPack:
+			{
+				__Msg_notifyRecvS2cReqPack* m = (__Msg_notifyRecvS2cReqPack*)msg;
+				std::unique_ptr<RecvPack> recv_pack(m->m_recv_pack);
+				m->m_recv_pack = nullptr;
+				m_init_param.m_callback->onClientNetwork_recvS2cReqPack(this, &recv_pack);
+			}
+			break;
+
+		case __EMsgType_notifyCgiDone:
+			{
+				__Msg_notifyCgiDone* m = (__Msg_notifyCgiDone*)msg;
+				m_init_param.m_callback->onClientNetwork_cgiDone(this, m->m_cgi);
+			}
+			break;
 		}
 	}
 	else if (msg->m_sender == m_init_param.m_sapi)
@@ -573,38 +613,6 @@ void ClientNetwork::__postMsgToSelf(Message * msg)
 	m_init_param.m_work_looper->postMessage(msg);
 }
 
-void ClientNetwork::__notifyStarted()
-{
-	m_init_param.m_callback->onClientNetwork_started(this);
-}
-
-void ClientNetwork::__notifyStopped()
-{
-	m_init_param.m_callback->onClientNetwork_stopped(this);
-}
-
-void ClientNetwork::__notifyRecvS2cPushPack(RecvPack * recv_pack)
-{
-	std::unique_ptr<RecvPack> recv_pack_ap(recv_pack);
-	m_init_param.m_callback->onClientNetwork_recvS2cPushPack(this, &recv_pack_ap);
-}
-
-void ClientNetwork::__notifyRecvS2cReqPack(RecvPack * recv_pack)
-{
-	std::unique_ptr<RecvPack> recv_pack_ap(recv_pack);
-	m_init_param.m_callback->onClientNetwork_recvS2cReqPack(this, &recv_pack_ap);
-}
-
-void ClientNetwork::__notifyConnectStateChanged(EConnectState state)
-{
-	m_init_param.m_callback->onClientNetwork_connectStateChanged(this, EConnectState_connected);
-}
-
-void ClientNetwork::__notifyCgiDone(ClientCgi * cgi)
-{
-	m_init_param.m_callback->onClientNetwork_cgiDone(this, cgi);
-}
-
 int ClientNetwork::__getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot)
 {
 	for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
@@ -635,7 +643,19 @@ ClientCgiInfo* ClientNetwork::__getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_
 	return nullptr;
 }
 
+void ClientNetwork::__notifyStarted()
+{
+	Message* m = new Message();
+	m->m_msg_type = __EMsgType_notifyStarted;
+	__postMsgToSelf(m);
+}
 
+void ClientNetwork::__notifyStopped()
+{
+	Message* m = new Message();
+	m->m_msg_type = __EMsgType_notifyStopped;
+	__postMsgToSelf(m);
+}
 
 
 
@@ -934,7 +954,7 @@ void ClientNetwork::__ClientCtx::onConnected()
 	m_connect_count = 0;
 
 	sendPack();
-	m_network->__notifyConnectStateChanged(EConnectState_connected);
+	__notifyConnectStateChanged(EConnectState_connected);
 }
 
 void ClientNetwork::__ClientCtx::onDisconnected()
@@ -956,8 +976,8 @@ void ClientNetwork::__ClientCtx::onDisconnected()
 			--i;
 		}
 	}
-
-	m_network->__notifyConnectStateChanged(EConnectState_disconnected);
+	
+	__notifyConnectStateChanged(EConnectState_disconnected);
 }
 
 
@@ -971,11 +991,11 @@ void ClientNetwork::__ClientCtx::__onRecvPack(RecvPack * recv_pack)
 	ClientCgiInfo* cgi_info = __getClientCgiInfoByRecvCmdType(recv_pack->m_recv_cmd_type);
 	if (cgi_info->m_cgi_type == EClientCgiType_s2cPush)
 	{
-		m_network->__notifyRecvS2cPushPack(recv_pack_ap.release());
+		__notifyRecvS2cPushPack(recv_pack_ap.release());
 	}
 	else if (cgi_info->m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
 	{
-		m_network->__notifyRecvS2cReqPack(recv_pack_ap.release());
+		__notifyRecvS2cReqPack(recv_pack_ap.release());
 	}
 	else if (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp)
 	{
@@ -1033,7 +1053,7 @@ void ClientNetwork::__ClientCtx::__markCgiDoneByIndex(int index, EErrType err_ty
 		}
 
 		slog_v("call back cgi=%0", (uint64_t)cgi);
-		m_network->__notifyCgiDone(cgi);
+		__notifyCgiDone(cgi);
 	}
 }
 
@@ -1121,6 +1141,36 @@ ClientCgiInfo* ClientNetwork::__ClientCtx::__getClientCgiInfoByRecvCmdType(uint3
 	return nullptr;
 }
 
+void ClientNetwork::__ClientCtx::__postMsgToNetwork(Message * msg)
+{
+	msg->m_sender = this;
+	msg->m_target = m_network;
+	m_init_param->m_work_looper->postMessage(msg);
+}
+
+void ClientNetwork::__ClientCtx::__notifyConnectStateChanged(EConnectState state)
+{
+	__Msg_notifyConectStateChanged* m = new __Msg_notifyConectStateChanged(state);
+	__postMsgToNetwork(m);
+}
+
+void ClientNetwork::__ClientCtx::__notifyRecvS2cPushPack(RecvPack * recv_pack)
+{
+	__Msg_notifyRecvS2cPushPack* m = new __Msg_notifyRecvS2cPushPack(recv_pack);
+	__postMsgToNetwork(m);
+}
+
+void ClientNetwork::__ClientCtx::__notifyRecvS2cReqPack(RecvPack * recv_pack)
+{
+	__Msg_notifyRecvS2cReqPack* m = new __Msg_notifyRecvS2cReqPack(recv_pack);
+	__postMsgToNetwork(m);
+}
+
+void ClientNetwork::__ClientCtx::__notifyCgiDone(ClientCgi * cgi)
+{
+	__Msg_notifyCgiDone* m = new __Msg_notifyCgiDone(cgi);
+	__postMsgToNetwork(m);
+}
 
 
 
