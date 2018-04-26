@@ -225,14 +225,31 @@ public:
 
 
 private:
+	enum __EMsgType
+	{
+		__EMsgType_sendPack = 19837811,
+		__EMsgType_notifyStarted,
+		__EMsgType_notifyStopped,
+		__EMsgType_notifyConectStateChanged,
+		__EMsgType_notifyRecvS2cPushPack,
+		__EMsgType_notifyRecvS2cReqPack,
+		__EMsgType_notifyCgiDone,
+	};
+
+	enum __EConnectState
+	{
+		__EConnectState_connecting,
+		__EConnectState_connected,
+		__EConnectState_disconnected,
+
+	};
+
 	class __Msg_notifyConectStateChanged;
 	class __Msg_notifyRecvS2cPushPack;
 	class __Msg_notifyRecvS2cReqPack;
 	class __Msg_notifyCgiDone;
 	class __CgiCtx;
 	class __ClientCtx;
-	enum __EMsgType;
-	enum __EConnectState;
 	
 
 
@@ -254,11 +271,11 @@ private:
 	bool __doTestSvrSpeed();
 	void __postSendPackMsgToSelf();
 	void __postMsgToSelf(Message* msg);
+	void __notifyStarted();
+	void __notifyStopped();
 	int __getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot);
 	ClientCgiInfo* __getClientCgiInfoBySendCmdType(uint32_t send_cmd_type);
 	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
-	void __notifyStarted();
-	void __notifyStopped();
 
 
 

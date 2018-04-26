@@ -3,25 +3,6 @@
 SCLIENT_NAMESPACE_BEGIN
 
 
-enum ClientNetwork::__EMsgType
-{
-	__EMsgType_sendPack = 19837811,
-	__EMsgType_notifyStarted,
-	__EMsgType_notifyStopped,
-	__EMsgType_notifyConectStateChanged,
-	__EMsgType_notifyRecvS2cPushPack,
-	__EMsgType_notifyRecvS2cReqPack,
-	__EMsgType_notifyCgiDone,
-};
-
-enum ClientNetwork::__EConnectState
-{
-	__EConnectState_connecting,
-	__EConnectState_connected,
-	__EConnectState_disconnected,
-};
-
-
 
 // Msg ---------------------------------------------------------------------------------------------
 class ClientNetwork::__Msg_notifyConectStateChanged : public Message
@@ -89,7 +70,6 @@ public:
 
 
 
-
 // ClientCgi ------------------------------------------------------------------------------------------
 void ClientNetwork::ClientCgi::setSendPack(SendPack * send_pack) 
 { 
@@ -139,43 +119,511 @@ public:
 class ClientNetwork::__ClientCtx
 {
 public:
-	__ClientCtx();
-	~__ClientCtx();
+	__ClientCtx()
+	{
+		m_sid = 0;
+		m_connect_state = __EConnectState_disconnected;
+		m_sending_cgi_index = -1;
+		m_svr_port = 0;
 
-	void init(InitParam* param, ClientNetwork* network);
-	bool start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port);
-	void stop();
-	bool connect();
-	bool startCgi(ClientCgi* cgi);
-	void cancelCgi(ClientCgi* cgi);
-	bool sendPack();
-	void checkTimeOutPacks();
-	socket_id_t getSid();
 
-	void onSendDataEnd();
-	void onRecvData(const Binary& recv_data);
-	void onConnected();
-	void onDisconnected();
+		m_is_repeat_last_connect_interval_ms = true;
+		m_last_reconnect_time_ms = 0;
+		m_connect_count = 0;
+	}
+
+	~__ClientCtx()
+	{
+		stop();
+		delete_and_erase_collection_elements(&m_cgi_ctxs);
+	}
+
+	void init(InitParam* param, ClientNetwork* network)
+	{
+		m_init_param = param; m_network = network;
+		m_connect_interval_mss = m_init_param->m_connect_interval_mss;
+	}
+
+	bool start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port)
+	{
+		if (m_sid != 0)
+		{
+			slog_e("ClientNetwork::__ClientCtx::start already start.");
+			return false;
+		}
+
+		m_connect_count = 0;
+		ITcpSocketCallbackApi::CreateClientSocketParam param;
+		param.m_callback_looper = m_init_param->m_work_looper;
+		param.m_callback_target = m_network;
+		param.m_svr_ip = svr_ip;
+		param.m_svr_port = svr_port;
+		if (!m_init_param->m_sapi->createClientSocket(&m_sid, param))
+			return false;
+
+		m_svr_ip_or_name = svr_ip_or_name;
+		m_svr_ip = svr_ip;
+		m_svr_port = svr_port;
+
+		return connect();
+	}
+
+	void stop()
+	{
+		m_init_param->m_sapi->stopClientSocket(m_sid);
+		__resetConnectState();
+	}
+
+	bool connect()
+	{
+		if (m_connect_state == __EConnectState_connected || m_connect_state == __EConnectState_connecting)
+			return true;
+
+		if (m_sid == 0)
+		{
+			slog_e("ClientNetwork::__ClientCtx::connect, fail, sid=0");
+			return false;
+		}
+
+		if (!__isTimeToConnect())
+			return true;
+
+		slog_v("doConnectSvr, connect_cout=%0", m_connect_count);
+		m_last_reconnect_time_ms = TimeUtil::getMsTime();
+		++m_connect_count;
+
+		// connect fasterst svr
+		slog_d("doConnectSvr, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
+		if (!m_init_param->m_sapi->startClientSocket(m_sid))
+		{
+			slog_e("ClientNetwork::__ClientCtx::connect fail to startClientSocket");
+			return false;
+		}
+
+		m_connect_state = __EConnectState_connecting;
+		m_init_param->m_callback->onClientNetwork_connectStateChanged(m_network, EConnectState_connecting);
+		return true;
+	}
+	
+	bool startCgi(ClientCgi* cgi)
+	{
+		if (cgi == nullptr || cgi->getSendPack() == nullptr)
+		{
+			slog_e("ClientNetwork::__ClientCtx::startCgi fail, cgi param err");
+			return false;
+		}
+
+		SendPack& send_pack = *cgi->getSendPack();
+		if (send_pack.m_send_whole_pack_bin.getLen() == 0)
+		{
+			slog_e("ClientNetwork::__ClientCtx::startCgi fail, len == 0. %0", send_pack.toOverviewString());
+			return false;
+		}
+
+		const ClientCgiInfo* cgi_info = &cgi->getCgiInfo();
+		if ((cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0)
+			|| (cgi_info->m_cgi_type == EClientCgiType_c2sNotify && send_pack.m_send_seq != 0)
+			|| (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0))
+		{
+			slog_e("ClientNetwork::__ClientCtx::startCgi, invalid send_seq! %0", send_pack.toOverviewString());
+			return false;
+		}
+
+		if (m_cgi_ctxs.size() >= m_init_param->m_max_pack_count)
+		{
+			slog_e("ClientNetwork::__ClientCtx::startCgi, too many packs in network");
+			return false;
+		}
+
+		int cgi_index = __getCgiIndexBySendPackId(cgi->getSendPack()->m_send_pack_id);
+		if (cgi_index >= 0)
+		{
+			slog_d("ClientNetwork::__ClientCtx::startCgi cgi already start? ignore");
+			return true;
+		}
+
+		size_t pack_count = __getCgiCountBySendPackCmdType(send_pack.m_send_cmd_type);
+		if (pack_count >= cgi_info->m_max_pack_count_in_queue)
+		{
+			slog_e("ClientNetwork::__ClientCtx::startCgi fail, too many send pack in queue in network! %0", send_pack.toOverviewString());
+			return false;
+		}
+
+		slog_d("sendPack, %0", send_pack.toOverviewString());
+		__addCgi(cgi);
+
+		return true;
+	}
+	
+	void cancelCgi(ClientCgi* cgi)
+	{
+		int cgi_index = __getCgiIndexBySendPackId(cgi->getSendPack()->m_send_pack_id);
+		if (cgi_index < 0)
+			return;
+
+		if (m_sending_cgi_index == cgi_index)
+		{
+			m_sending_cgi_index = -1;
+		}
+
+		delete_and_erase_vector_element_by_index(&m_cgi_ctxs, cgi_index);
+	}
+	
+	bool sendPack()
+	{
+		checkTimeOutPacks();
+
+		// need connect
+		if (m_connect_state != __EConnectState_connected)
+			return true;
+
+		// already sending
+		if (m_sending_cgi_index >= 0)
+			return true;
+
+		// get max priory pack and send
+		int to_send_cgi_index = __getMaxPrioryCgiIndex();
+		if (to_send_cgi_index < 0)
+			return true;
+
+		SendPack* send_pack = m_cgi_ctxs[to_send_cgi_index]->m_cgi->getSendPack();
+		if (!m_init_param->m_sapi->sendDataFromClientSocketToSvr(m_sid, send_pack->m_send_whole_pack_bin.getData(), send_pack->m_send_whole_pack_bin.getLen()))
+		{
+			slog_w("fail to sendDataFromClientSocketToSvr, maybe is disconnected, will retry");
+			return false;
+		}
+
+		slog_d("send pack ok, cmd_type=%0, pack_data_len=%1, pack_len=%2", send_pack->m_send_cmd_type, send_pack->m_send_whole_pack_bin.getLen(), send_pack->m_send_whole_pack_bin.getLen());
+		m_cgi_ctxs[to_send_cgi_index]->m_try_count++;
+		m_sending_cgi_index = to_send_cgi_index;
+
+		return true;
+	}
+	
+	void checkTimeOutPacks()
+	{
+		uint64_t cur_time_ms = TimeUtil::getMsTime();
+		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
+		{
+			__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
+			bool is_time_out = cur_time_ms - cgi_ctx->m_create_time >= cgi_ctx->m_cgi->getCgiInfo().m_cgi_time_out_ms;
+			if (is_time_out)
+			{
+				__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackTimeOutErr);
+				--i;
+			}
+		}
+	}
+	
+	socket_id_t getSid()
+	{
+		return m_sid;
+	}
+
+	void onSendDataEnd()
+	{
+		int sending_pack_index = m_sending_cgi_index;
+		m_sending_cgi_index = -1;
+
+		if (sending_pack_index >= 0)
+		{
+			__CgiCtx* cgi_ctx = m_cgi_ctxs[sending_pack_index];
+			ClientCgi* cgi = cgi_ctx->m_cgi;
+			if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sReq_s2cResp) // need to wait s2cResp pack
+			{
+				cgi_ctx->m_is_sent = true;
+			}
+			else if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sNotify || cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
+			{
+				__markCgiDoneByIndex(sending_pack_index, EErrType_ok, 0);
+			}
+			else
+			{
+				slog_e("__ClientCtx::onSendDataEnd invalid path, cgi_type=%0", cgi_ctx->m_cgi->getCgiInfo().m_cgi_type);
+			}
+		}
+
+		sendPack();
+	}
+	
+	void onRecvData(const Binary& recv_data)
+	{
+		slog_d("recv data len=%0", recv_data.getLen());
+		m_recv_data.append(recv_data);
+
+		while (true)
+		{
+			//if (!m_is_running)
+			//	break;
+
+			UnpackResult r;
+			m_init_param->m_unpacker->unpackClientRecvPack(m_recv_data.getData(), m_recv_data.getLen(), &r);
+			if (r.m_result_type == EUnpackResultType_ok)
+			{
+				slog_d("unpack ok");
+				m_recv_data.shrinkBegin(r.m_unpack_raw_data_len);
+
+				ClientCgiInfo* cgi_info = __getClientCgiInfoByRecvCmdType(r.m_recv_cmd_type);
+				if (cgi_info == nullptr)
+				{
+					slog_w("ClientNetwork::__onMsgTcpSocketClientRecvData fail to get cgi_info, recv_pack.recv_cmd_type=%0, ignore", r.m_recv_cmd_type);
+					continue;
+				}
+
+				RecvPack* recv_pack = new RecvPack();
+				recv_pack->m_recv_cmd_type = r.m_recv_cmd_type;
+				recv_pack->m_recv_seq = r.m_recv_seq;
+				recv_pack->m_recv_ext = r.m_recv_ext;
+				__onRecvPack(recv_pack); // ignore err.
+
+				if (m_recv_data.getLen() == 0)
+					break;
+			}
+			else if (r.m_result_type == EUnpackResultType_needMoreData)
+			{
+				break;
+			}
+			else // fatal error
+			{
+				slog_e("ClientNetwork::__onMsgTcpSocketClientRecvData fail to unpack. try disconnect");
+				stop();
+				break;
+			}
+		}
+	}
+	
+	void onConnected()
+	{
+		slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
+		if (m_connect_state == __EConnectState_connected)
+			return;
+
+		m_connect_state = __EConnectState_connected;
+		m_connect_count = 0;
+
+		sendPack();
+
+		__notifyConnectStateChanged(EConnectState_connected);
+	}
+	
+	void onDisconnected()
+	{
+		slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
+		if (m_connect_state == __EConnectState_disconnected)
+			return;
+
+		__resetConnectState();
+
+		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
+		{
+			__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
+			cgi_ctx->m_is_sent = false;
+
+			if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount())
+			{
+				__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackSysErr);
+				--i;
+			}
+		}
+
+		__notifyConnectStateChanged(EConnectState_disconnected);
+	}
+
+
 
 
 
 private:
-	void __onRecvPack(RecvPack* recv_pack);
-	void __resetConnectState();
-	void __addCgi(ClientCgi* cgi);
-	void __markCgiDoneByIndex(int index, EErrType err_type, int err_code);
-	bool __isTimeToConnect();
-	uint64_t __getConnectIntervalMs(size_t connect_count);
-	int __getMaxPrioryCgiIndex();
-	int __getCgiIndexBySendPackId(uint64_t send_pack_id);
-	int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq);
-	size_t __getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type);
-	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type);
-	void __postMsgToNetwork(Message* msg);
-	void __notifyConnectStateChanged(EConnectState state);
-	void __notifyRecvS2cPushPack(RecvPack* recv_pack);
-	void __notifyRecvS2cReqPack(RecvPack* recv_pack);
-	void __notifyCgiDone(ClientCgi* cgi);
+	void __onRecvPack(RecvPack* recv_pack)
+	{
+		std::unique_ptr<RecvPack> recv_pack_ap(recv_pack);
+
+		ClientCgiInfo* cgi_info = __getClientCgiInfoByRecvCmdType(recv_pack->m_recv_cmd_type);
+		if (cgi_info->m_cgi_type == EClientCgiType_s2cPush)
+		{
+			__notifyRecvS2cPushPack(recv_pack_ap.release());
+		}
+		else if (cgi_info->m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
+		{
+			__notifyRecvS2cReqPack(recv_pack_ap.release());
+		}
+		else if (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp)
+		{
+			int cgi_indx = __getCgiIndexBySendPackSeq(recv_pack->m_recv_seq);
+			if (cgi_indx < 0)
+			{
+				slog_d("ClientNetwork::__ClientCtx::onRecvPack recv s2cResp pack, but can't find c2sReq pack, maybe cgi is canceled. ignore.");
+				return;
+			}
+
+			m_cgi_ctxs[cgi_indx]->m_cgi->setRecvPack(recv_pack_ap.release());
+
+			__markCgiDoneByIndex(cgi_indx, EErrType_ok, 0);
+		}
+		else
+		{
+			slog_w("ClientNetwork::__ClientCtx::onRecvPack recv c2sPush_pack! ignore.");
+		}
+	}
+	
+	void __resetConnectState()
+	{
+		m_connect_state = __EConnectState_disconnected;
+		m_recv_data.clear();
+		m_sending_cgi_index = -1;
+	}
+	
+	void __addCgi(ClientCgi* cgi)
+	{
+		cgi->setStartMs(TimeUtil::getMsTime());
+
+		__CgiCtx* cgi_ctx = new __CgiCtx();
+		cgi_ctx->m_cgi = cgi;
+		cgi_ctx->m_create_time = TimeUtil::getMsTime();
+		m_cgi_ctxs.push_back(cgi_ctx);
+	}
+	
+	void __markCgiDoneByIndex(int index, EErrType err_type, int err_code)
+	{
+		if (index < 0 || index >= m_cgi_ctxs.size())
+			return;
+
+		__CgiCtx* cgi_ctx = m_cgi_ctxs[index];
+		m_cgi_ctxs.erase(m_cgi_ctxs.begin() + index);
+		ClientCgi* cgi = cgi_ctx->m_cgi;
+		delete cgi_ctx;
+
+		{
+			cgi->setErrType(err_type);
+			cgi->setErrCode(err_code);
+			cgi->setEndMs(TimeUtil::getMsTime());
+			if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cPush)
+			{
+				slog_e("ClientNetwork::__ClientCtx::__markCgiDoneByCgiCtx invalid path");
+			}
+
+			slog_v("call back cgi=%0", (uint64_t)cgi);
+			__notifyCgiDone(cgi);
+		}
+	}
+	
+	bool __isTimeToConnect()
+	{
+		uint64_t connect_interval_ms = __getConnectIntervalMs(m_connect_count);
+		uint64_t cur_time_ms = TimeUtil::getMsTime();
+		bool is_time_to_connect = cur_time_ms > m_last_reconnect_time_ms + connect_interval_ms;
+		return is_time_to_connect;
+	}
+	
+	uint64_t __getConnectIntervalMs(size_t connect_count)
+	{
+		if (m_connect_interval_mss.size() == 0)
+			return -1;
+
+		if (connect_count <= m_connect_interval_mss.size() - 1)
+		{
+			return m_connect_interval_mss[connect_count];
+		}
+		else
+		{
+			if (m_is_repeat_last_connect_interval_ms)
+				return *m_connect_interval_mss.rbegin();
+			else
+				return -1;
+		}
+	}
+	
+	int __getMaxPrioryCgiIndex()
+	{
+		if (m_cgi_ctxs.size() == 0)
+			return -1;
+
+		int max_priory_pack_index = -1;
+		int max_priory = 0;
+		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
+		{
+			__CgiCtx* ctx = m_cgi_ctxs[i];
+			if (ctx->m_is_sent)
+				continue;
+			if (ctx->m_cgi->getCgiInfo().m_priority > max_priory)
+			{
+				max_priory = ctx->m_cgi->getCgiInfo().m_priority;
+				max_priory_pack_index = (int)i;
+			}
+		}
+
+		return max_priory_pack_index;
+	}
+	
+	int __getCgiIndexBySendPackId(uint64_t send_pack_id)
+	{
+		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
+		{
+			if (m_cgi_ctxs[i]->m_cgi->getSendPack()->m_send_pack_id == send_pack_id)
+				return (int)i;
+		}
+		return -1;
+	}
+	
+	int __getCgiIndexBySendPackSeq(uint64_t send_pack_seq)
+	{
+		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
+		{
+			__CgiCtx* ctx = m_cgi_ctxs[i];
+			if (ctx->m_cgi->getSendPack()->m_send_seq == send_pack_seq)
+				return (int)i;
+		}
+		return -1;
+	}
+	
+	size_t __getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type)
+	{
+		return 0;
+	}
+	
+	ClientCgiInfo* __getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type)
+	{
+		for (auto it = m_init_param->m_send_cmd_type_to_cgi_info_map.begin(); it != m_init_param->m_send_cmd_type_to_cgi_info_map.end(); ++it)
+		{
+			if (it->second.m_recv_cmd_type == recv_cmd_type)
+				return &it->second;
+		}
+		return nullptr;
+	}
+	
+	void __postMsgToNetwork(Message* msg)
+	{
+		msg->m_sender = this;
+		msg->m_target = m_network;
+		m_init_param->m_work_looper->postMessage(msg);
+	}
+	
+	void __notifyConnectStateChanged(EConnectState state)
+	{
+		__Msg_notifyConectStateChanged* m = new __Msg_notifyConectStateChanged(state);
+		__postMsgToNetwork(m);
+	}
+	
+	void __notifyRecvS2cPushPack(RecvPack* recv_pack)
+	{
+		__Msg_notifyRecvS2cPushPack* m = new __Msg_notifyRecvS2cPushPack(recv_pack);
+		__postMsgToNetwork(m);
+	}
+	
+	void __notifyRecvS2cReqPack(RecvPack* recv_pack)
+	{
+		__Msg_notifyRecvS2cReqPack* m = new __Msg_notifyRecvS2cReqPack(recv_pack);
+		__postMsgToNetwork(m);
+	}
+	
+	void __notifyCgiDone(ClientCgi* cgi)
+	{
+		__Msg_notifyCgiDone* m = new __Msg_notifyCgiDone(cgi);
+		__postMsgToNetwork(m);
+	}
+
+
+
 
 
 	InitParam* m_init_param;
@@ -201,8 +649,21 @@ private:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ClientNetwork ------------------------------------------------------------------------------------------
-// interface --
 ClientNetwork::ClientNetwork()
 {
 	slog_d("new ClientNetwork=%0", (uint64_t)this);
@@ -387,11 +848,6 @@ void ClientNetwork::stopCgi(ClientCgi * cgi)
 
 
 
-
-
-
-
-// message handler --
 void ClientNetwork::onMessage(Message * msg, bool* isHandled)
 {
 	if (msg->m_target != this)
@@ -563,13 +1019,6 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 
 
 
-
-
-
-
-
-
-// helper function --
 bool ClientNetwork::__doConnectTcpSvr()
 {
 	// find out the fastest svr
@@ -613,6 +1062,20 @@ void ClientNetwork::__postMsgToSelf(Message * msg)
 	m_init_param.m_work_looper->postMessage(msg);
 }
 
+void ClientNetwork::__notifyStarted()
+{
+	Message* m = new Message();
+	m->m_msg_type = __EMsgType_notifyStarted;
+	__postMsgToSelf(m);
+}
+
+void ClientNetwork::__notifyStopped()
+{
+	Message* m = new Message();
+	m->m_msg_type = __EMsgType_notifyStopped;
+	__postMsgToSelf(m);
+}
+
 int ClientNetwork::__getSvrInfoIndexBySvrIpAndPort(const std::string& svr_ip, uint32_t prot)
 {
 	for (size_t i = 0; i < m_init_param.m_svr_infos.size(); ++i)
@@ -642,537 +1105,6 @@ ClientCgiInfo* ClientNetwork::__getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_
 	}
 	return nullptr;
 }
-
-void ClientNetwork::__notifyStarted()
-{
-	Message* m = new Message();
-	m->m_msg_type = __EMsgType_notifyStarted;
-	__postMsgToSelf(m);
-}
-
-void ClientNetwork::__notifyStopped()
-{
-	Message* m = new Message();
-	m->m_msg_type = __EMsgType_notifyStopped;
-	__postMsgToSelf(m);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-// __ClientCtx ----------------------------------------------
-
-ClientNetwork::__ClientCtx::__ClientCtx()
-{ 
-	m_sid = 0;
-	m_connect_state = __EConnectState_disconnected;
-	m_sending_cgi_index = -1;
-	m_svr_port = 0;
-
-
-	m_is_repeat_last_connect_interval_ms = true;
-	m_last_reconnect_time_ms = 0;
-	m_connect_count = 0;
-}
-
-ClientNetwork::__ClientCtx::~__ClientCtx()
-{
-	stop();
-	delete_and_erase_collection_elements(&m_cgi_ctxs);
-}
-
-void ClientNetwork::__ClientCtx::init(InitParam * param, ClientNetwork * network)
-{
-	m_init_param = param; m_network = network;
-	m_connect_interval_mss = m_init_param->m_connect_interval_mss;
-}
-
-bool ClientNetwork::__ClientCtx::start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port)
-{
-	if (m_sid != 0)
-	{
-		slog_e("ClientNetwork::__ClientCtx::start already start.");
-		return false;
-	}
-
-	m_connect_count = 0;
-	ITcpSocketCallbackApi::CreateClientSocketParam param;
-	param.m_callback_looper = m_init_param->m_work_looper;
-	param.m_callback_target = m_network;
-	param.m_svr_ip = svr_ip;
-	param.m_svr_port = svr_port;
-	if (!m_init_param->m_sapi->createClientSocket(&m_sid, param))
-		return false;
-
-	m_svr_ip_or_name = svr_ip_or_name;
-	m_svr_ip = svr_ip;
-	m_svr_port = svr_port;
-
-	return connect();
-}
-
-void ClientNetwork::__ClientCtx::stop()
-{
-	m_init_param->m_sapi->stopClientSocket(m_sid);
-	__resetConnectState();
-}
-
-bool ClientNetwork::__ClientCtx::connect()
-{
-	if (m_connect_state == __EConnectState_connected || m_connect_state == __EConnectState_connecting)
-		return true;
-
-	if (m_sid == 0)
-	{
-		slog_e("ClientNetwork::__ClientCtx::connect, fail, sid=0");
-		return false;
-	}
-
-	if (!__isTimeToConnect())
-		return true;
-
-	slog_v("doConnectSvr, connect_cout=%0", m_connect_count);
-	m_last_reconnect_time_ms = TimeUtil::getMsTime();
-	++m_connect_count;
-
-	// connect fasterst svr
-	slog_d("doConnectSvr, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
-	if (!m_init_param->m_sapi->startClientSocket(m_sid))
-	{
-		slog_e("ClientNetwork::__ClientCtx::connect fail to startClientSocket");
-		return false;
-	}
-
-	m_connect_state = __EConnectState_connecting;
-	m_init_param->m_callback->onClientNetwork_connectStateChanged(m_network, EConnectState_connecting);
-	return true;
-}
-
-bool ClientNetwork::__ClientCtx::startCgi(ClientCgi * cgi)
-{
-	if (cgi == nullptr || cgi->getSendPack() == nullptr)
-	{
-		slog_e("ClientNetwork::__ClientCtx::startCgi fail, cgi param err");
-		return false;
-	}
-
-	SendPack& send_pack = *cgi->getSendPack();
-	if (send_pack.m_send_whole_pack_bin.getLen() == 0)
-	{
-		slog_e("ClientNetwork::__ClientCtx::startCgi fail, len == 0. %0", send_pack.toOverviewString());
-		return false;
-	}
-
-	const ClientCgiInfo* cgi_info = &cgi->getCgiInfo();
-	if ((cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0)
-		|| (cgi_info->m_cgi_type == EClientCgiType_c2sNotify && send_pack.m_send_seq != 0)
-		|| (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp && send_pack.m_send_seq == 0))
-	{
-		slog_e("ClientNetwork::__ClientCtx::startCgi, invalid send_seq! %0", send_pack.toOverviewString());
-		return false;
-	}
-
-	if (m_cgi_ctxs.size() >= m_init_param->m_max_pack_count)
-	{
-		slog_e("ClientNetwork::__ClientCtx::startCgi, too many packs in network");
-		return false;
-	}
-
-	int cgi_index = __getCgiIndexBySendPackId(cgi->getSendPack()->m_send_pack_id);
-	if (cgi_index >= 0)
-	{
-		slog_d("ClientNetwork::__ClientCtx::startCgi cgi already start? ignore");
-		return true;
-	}
-
-	size_t pack_count = __getCgiCountBySendPackCmdType(send_pack.m_send_cmd_type);
-	if (pack_count >= cgi_info->m_max_pack_count_in_queue)
-	{
-		slog_e("ClientNetwork::__ClientCtx::startCgi fail, too many send pack in queue in network! %0", send_pack.toOverviewString());
-		return false;
-	}
-
-	slog_d("sendPack, %0", send_pack.toOverviewString());
-	__addCgi(cgi);
-
-	return true;
-}
-
-void ClientNetwork::__ClientCtx::cancelCgi(ClientCgi * cgi)
-{
-	int cgi_index = __getCgiIndexBySendPackId(cgi->getSendPack()->m_send_pack_id);
-	if (cgi_index < 0)
-		return;
-
-	if (m_sending_cgi_index == cgi_index)
-	{
-		m_sending_cgi_index = -1;
-	}
-
-	delete_and_erase_vector_element_by_index(&m_cgi_ctxs, cgi_index);
-}
-
-bool ClientNetwork::__ClientCtx::sendPack()
-{
-	checkTimeOutPacks();
-
-	// need connect
-	if (m_connect_state != __EConnectState_connected)
-		return true;
-
-	// already sending
-	if (m_sending_cgi_index >= 0)
-		return true;
-
-	// get max priory pack and send
-	int to_send_cgi_index = __getMaxPrioryCgiIndex();
-	if (to_send_cgi_index < 0)
-		return true;
-
-	SendPack* send_pack = m_cgi_ctxs[to_send_cgi_index]->m_cgi->getSendPack();
-	if (!m_init_param->m_sapi->sendDataFromClientSocketToSvr(m_sid, send_pack->m_send_whole_pack_bin.getData(), send_pack->m_send_whole_pack_bin.getLen()))
-	{
-		slog_w("fail to sendDataFromClientSocketToSvr, maybe is disconnected, will retry");
-		return false;
-	}
-
-	slog_d("send pack ok, cmd_type=%0, pack_data_len=%1, pack_len=%2", send_pack->m_send_cmd_type, send_pack->m_send_whole_pack_bin.getLen(), send_pack->m_send_whole_pack_bin.getLen());
-	m_cgi_ctxs[to_send_cgi_index]->m_try_count++;
-	m_sending_cgi_index = to_send_cgi_index;
-
-	return true;
-}
-
-void ClientNetwork::__ClientCtx::checkTimeOutPacks()
-{
-	uint64_t cur_time_ms = TimeUtil::getMsTime();
-	for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
-	{
-		__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
-		bool is_time_out = cur_time_ms - cgi_ctx->m_create_time >= cgi_ctx->m_cgi->getCgiInfo().m_cgi_time_out_ms;
-		if (is_time_out)
-		{
-			__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackTimeOutErr);
-			--i;
-		}
-	}
-}
-
-socket_id_t ClientNetwork::__ClientCtx::getSid() 
-{ 
-	return m_sid; 
-}
-
-void ClientNetwork::__ClientCtx::onSendDataEnd()
-{
-	int sending_pack_index = m_sending_cgi_index;
-	m_sending_cgi_index = -1;
-
-	if (sending_pack_index >= 0)
-	{
-		__CgiCtx* cgi_ctx = m_cgi_ctxs[sending_pack_index];
-		ClientCgi* cgi = cgi_ctx->m_cgi;
-		if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sReq_s2cResp) // need to wait s2cResp pack
-		{
-			cgi_ctx->m_is_sent = true;
-		}
-		else if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sNotify || cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
-		{
-			__markCgiDoneByIndex(sending_pack_index, EErrType_ok, 0);
-		}
-		else
-		{
-			slog_e("__ClientCtx::onSendDataEnd invalid path, cgi_type=%0", cgi_ctx->m_cgi->getCgiInfo().m_cgi_type);
-		}
-	}
-
-	sendPack();
-}
-
-void ClientNetwork::__ClientCtx::onRecvData(const Binary & recv_data)
-{
-	slog_d("recv data len=%0", recv_data.getLen());
-	m_recv_data.append(recv_data);
-
-	while (true)
-	{
-		//if (!m_is_running)
-		//	break;
-
-		UnpackResult r;
-		m_init_param->m_unpacker->unpackClientRecvPack(m_recv_data.getData(), m_recv_data.getLen(), &r);
-		if (r.m_result_type == EUnpackResultType_ok)
-		{
-			slog_d("unpack ok");
-			m_recv_data.shrinkBegin(r.m_unpack_raw_data_len);
-
-			ClientCgiInfo* cgi_info = __getClientCgiInfoByRecvCmdType(r.m_recv_cmd_type);
-			if (cgi_info == nullptr)
-			{
-				slog_w("ClientNetwork::__onMsgTcpSocketClientRecvData fail to get cgi_info, recv_pack.recv_cmd_type=%0, ignore", r.m_recv_cmd_type);
-				continue;
-			}
-
-			RecvPack* recv_pack = new RecvPack();
-			recv_pack->m_recv_cmd_type = r.m_recv_cmd_type;
-			recv_pack->m_recv_seq = r.m_recv_seq;
-			recv_pack->m_recv_ext = r.m_recv_ext;
-			__onRecvPack(recv_pack); // ignore err.
-
-			if (m_recv_data.getLen() == 0)
-				break;
-		}
-		else if (r.m_result_type == EUnpackResultType_needMoreData)
-		{
-			break;
-		}
-		else // fatal error
-		{
-			slog_e("ClientNetwork::__onMsgTcpSocketClientRecvData fail to unpack. try disconnect");
-			stop();
-			break;
-		}
-	}
-}
-
-void ClientNetwork::__ClientCtx::onConnected()
-{
-	slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
-	if (m_connect_state == __EConnectState_connected)
-		return;
-
-	m_connect_state = __EConnectState_connected;
-	m_connect_count = 0;
-
-	sendPack();
-	__notifyConnectStateChanged(EConnectState_connected);
-}
-
-void ClientNetwork::__ClientCtx::onDisconnected()
-{
-	slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
-	if (m_connect_state == __EConnectState_disconnected)
-		return;
-
-	__resetConnectState();
-
-	for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
-	{
-		__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
-		cgi_ctx->m_is_sent = false;
-
-		if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount())
-		{
-			__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackSysErr);
-			--i;
-		}
-	}
-	
-	__notifyConnectStateChanged(EConnectState_disconnected);
-}
-
-
-
-
-
-void ClientNetwork::__ClientCtx::__onRecvPack(RecvPack * recv_pack)
-{
-	std::unique_ptr<RecvPack> recv_pack_ap(recv_pack);
-
-	ClientCgiInfo* cgi_info = __getClientCgiInfoByRecvCmdType(recv_pack->m_recv_cmd_type);
-	if (cgi_info->m_cgi_type == EClientCgiType_s2cPush)
-	{
-		__notifyRecvS2cPushPack(recv_pack_ap.release());
-	}
-	else if (cgi_info->m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
-	{
-		__notifyRecvS2cReqPack(recv_pack_ap.release());
-	}
-	else if (cgi_info->m_cgi_type == EClientCgiType_c2sReq_s2cResp)
-	{
-		int cgi_indx = __getCgiIndexBySendPackSeq(recv_pack->m_recv_seq);
-		if (cgi_indx < 0)
-		{
-			slog_d("ClientNetwork::__ClientCtx::onRecvPack recv s2cResp pack, but can't find c2sReq pack, maybe cgi is canceled. ignore.");
-			return;
-		}
-
-		m_cgi_ctxs[cgi_indx]->m_cgi->setRecvPack(recv_pack_ap.release());
-
-		__markCgiDoneByIndex(cgi_indx, EErrType_ok, 0);
-	}
-	else
-	{
-		slog_w("ClientNetwork::__ClientCtx::onRecvPack recv c2sPush_pack! ignore.");
-	}
-}
-
-void ClientNetwork::__ClientCtx::__resetConnectState()
-{
-	m_connect_state = __EConnectState_disconnected;
-	m_recv_data.clear();
-	m_sending_cgi_index = -1;
-}
-
-void ClientNetwork::__ClientCtx::__addCgi(ClientCgi * cgi)
-{
-	cgi->setStartMs(TimeUtil::getMsTime());
-
-	__CgiCtx* cgi_ctx = new __CgiCtx();
-	cgi_ctx->m_cgi = cgi;
-	cgi_ctx->m_create_time = TimeUtil::getMsTime();
-	m_cgi_ctxs.push_back(cgi_ctx);
-}
-
-void ClientNetwork::__ClientCtx::__markCgiDoneByIndex(int index, EErrType err_type, int err_code)
-{
-	if (index < 0 || index >= m_cgi_ctxs.size())
-		return;
-
-	__CgiCtx* cgi_ctx = m_cgi_ctxs[index];
-	m_cgi_ctxs.erase(m_cgi_ctxs.begin() + index);
-	ClientCgi* cgi = cgi_ctx->m_cgi;
-	delete cgi_ctx;
-
-	{
-		cgi->setErrType(err_type);
-		cgi->setErrCode(err_code);
-		cgi->setEndMs(TimeUtil::getMsTime());
-		if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cPush)
-		{
-			slog_e("ClientNetwork::__ClientCtx::__markCgiDoneByCgiCtx invalid path");
-		}
-
-		slog_v("call back cgi=%0", (uint64_t)cgi);
-		__notifyCgiDone(cgi);
-	}
-}
-
-bool ClientNetwork::__ClientCtx::__isTimeToConnect()
-{
-	uint64_t connect_interval_ms = __getConnectIntervalMs(m_connect_count);
-	uint64_t cur_time_ms = TimeUtil::getMsTime();
-	bool is_time_to_connect = cur_time_ms > m_last_reconnect_time_ms + connect_interval_ms;
-	return is_time_to_connect;
-}
-
-uint64_t ClientNetwork::__ClientCtx::__getConnectIntervalMs(size_t connect_count)
-{
-	if (m_connect_interval_mss.size() == 0)
-		return -1;
-
-	if (connect_count <= m_connect_interval_mss.size() - 1)
-	{
-		return m_connect_interval_mss[connect_count];
-	}
-	else
-	{
-		if (m_is_repeat_last_connect_interval_ms)
-			return *m_connect_interval_mss.rbegin();
-		else
-			return -1;
-	}
-}
-
-int ClientNetwork::__ClientCtx::__getMaxPrioryCgiIndex()
-{
-	if (m_cgi_ctxs.size() == 0)
-		return -1;
-
-	int max_priory_pack_index = -1;
-	int max_priory = 0;
-	for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
-	{
-		__CgiCtx* ctx = m_cgi_ctxs[i];
-		if (ctx->m_is_sent)
-			continue;
-		if (ctx->m_cgi->getCgiInfo().m_priority > max_priory)
-		{
-			max_priory = ctx->m_cgi->getCgiInfo().m_priority;
-			max_priory_pack_index = (int)i;
-		}
-	}
-
-	return max_priory_pack_index;
-}
-
-int ClientNetwork::__ClientCtx::__getCgiIndexBySendPackSeq(uint64_t send_pack_seq)
-{
-	for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
-	{
-		__CgiCtx* ctx = m_cgi_ctxs[i];
-		if (ctx->m_cgi->getSendPack()->m_send_seq == send_pack_seq)
-			return (int)i;
-	}
-	return -1;
-}
-
-int ClientNetwork::__ClientCtx::__getCgiIndexBySendPackId(uint64_t send_pack_id)
-{
-	for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
-	{
-		if (m_cgi_ctxs[i]->m_cgi->getSendPack()->m_send_pack_id == send_pack_id)
-			return (int)i;
-	}
-	return -1;
-}
-
-size_t ClientNetwork::__ClientCtx::__getCgiCountBySendPackCmdType(uint32_t send_pack_cmd_type)
-{
-	return 0;
-}
-
-ClientCgiInfo* ClientNetwork::__ClientCtx::__getClientCgiInfoByRecvCmdType(uint32_t recv_cmd_type)
-{
-	for (auto it = m_init_param->m_send_cmd_type_to_cgi_info_map.begin(); it != m_init_param->m_send_cmd_type_to_cgi_info_map.end(); ++it)
-	{
-		if (it->second.m_recv_cmd_type == recv_cmd_type)
-			return &it->second;
-	}
-	return nullptr;
-}
-
-void ClientNetwork::__ClientCtx::__postMsgToNetwork(Message * msg)
-{
-	msg->m_sender = this;
-	msg->m_target = m_network;
-	m_init_param->m_work_looper->postMessage(msg);
-}
-
-void ClientNetwork::__ClientCtx::__notifyConnectStateChanged(EConnectState state)
-{
-	__Msg_notifyConectStateChanged* m = new __Msg_notifyConectStateChanged(state);
-	__postMsgToNetwork(m);
-}
-
-void ClientNetwork::__ClientCtx::__notifyRecvS2cPushPack(RecvPack * recv_pack)
-{
-	__Msg_notifyRecvS2cPushPack* m = new __Msg_notifyRecvS2cPushPack(recv_pack);
-	__postMsgToNetwork(m);
-}
-
-void ClientNetwork::__ClientCtx::__notifyRecvS2cReqPack(RecvPack * recv_pack)
-{
-	__Msg_notifyRecvS2cReqPack* m = new __Msg_notifyRecvS2cReqPack(recv_pack);
-	__postMsgToNetwork(m);
-}
-
-void ClientNetwork::__ClientCtx::__notifyCgiDone(ClientCgi * cgi)
-{
-	__Msg_notifyCgiDone* m = new __Msg_notifyCgiDone(cgi);
-	__postMsgToNetwork(m);
-}
-
-
 
 
 
