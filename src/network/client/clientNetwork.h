@@ -127,8 +127,8 @@ public:
 		uint64_t	getStartMs() { return m_start_ms; }
 		uint64_t	getEndMs() { return m_end_ms; }
 
-		void		setSendPack(SendPack* send_pack) { m_send_pack = send_pack; }
-		void		setRecvPack(RecvPack* recv_pack) { m_recv_pack = recv_pack; onSetRecvPackEnd(); }
+		void		setSendPack(SendPack* send_pack);
+		void		setRecvPack(RecvPack* recv_pack);
 		void		setErrType(EErrType err_type) { m_err_code = err_type; }
 		void		setErrCode(int err_code) { m_err_code = err_code; }
 		void		setStartMs(uint64_t ms) { m_start_ms = ms; }

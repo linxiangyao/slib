@@ -54,24 +54,31 @@ session_id_t ServerNetwork::ServerCgi::getSessionId()
 		return session_id_t();
 }
 
-void ServerNetwork::ServerCgi::__setSendPack(SendPack * send_pack)
+void ServerNetwork::ServerCgi::setSendPack(SendPack * send_pack) 
 {
 	m_send_pack = send_pack;
 	if (send_pack == nullptr)
 		return;
-	
-	//send_pack->m_send_cmd_type = getServerCgiInfo().m_send_cmd_type;
-
-	//if (m_recv_pack == nullptr)
-	//	return;
-
-	//if (getServerCgiInfo().m_cgi_type == EServerCgiType_c2sReq_s2cResp)
-	//{
-	//	send_pack->m_send_seq = m_recv_pack->m_recv_seq;
-	//	send_pack->m_ssid = m_recv_pack->m_ssid;
-	//	send_pack->m_sid = m_recv_pack->m_sid;
-	//}
+	if (send_pack->m_send_cmd_type != getServerCgiInfo().m_send_cmd_type)
+	{
+		slog_e("ServerNetwork::ServerCgi::__setSendPack send_pack->m_send_cmd_type(%0) != getServerCgiInfo().m_send_cmd_type(%1)", send_pack->m_send_cmd_type, getServerCgiInfo().m_send_cmd_type);
+	}
 }
+
+void ServerNetwork::ServerCgi::setRecvPack(RecvPack * recv_pack) 
+{
+	m_recv_pack = recv_pack;
+	if (recv_pack != nullptr)
+	{
+		if (recv_pack->m_recv_cmd_type != getServerCgiInfo().m_recv_cmd_type)
+		{
+			slog_e("ServerNetwork::ServerCgi::__setRecvPack recv_pack->m_recv_cmd_type(%0) != getServerCgiInfo().m_recv_cmd_type(%1)", recv_pack->m_recv_cmd_type, getServerCgiInfo().m_recv_cmd_type);
+		}
+	}
+
+	onSetRecvPackEnd();
+}
+
 
 
 

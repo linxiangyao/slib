@@ -143,8 +143,8 @@ public:
 		void setErrCode(EErrCode err_code) { m_err_code = err_code; }
 		void setStartMs(uint64_t ms) { m_start_ms = ms; }
 		void setEndMs(uint64_t ms) { m_end_ms = ms; }
-		void setSendPack(SendPack* send_pack) { __setSendPack(send_pack); }
-		void setRecvPack(RecvPack* recv_pack) { m_recv_pack = recv_pack; onSetRecvPackEnd(); }
+		void setSendPack(SendPack* send_pack);
+		void setRecvPack(RecvPack* recv_pack);
 
 
 	protected:
@@ -153,9 +153,6 @@ public:
 
 
 	private:
-		void __setSendPack(SendPack* send_pack);
-
-
 		SendPack* m_send_pack;
 		RecvPack* m_recv_pack;
 		ServerNetwork::EErrCode m_err_code;

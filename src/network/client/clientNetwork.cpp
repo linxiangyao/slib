@@ -2,6 +2,39 @@
 #include "clientNetwork.h"
 SCLIENT_NAMESPACE_BEGIN
 
+
+// ClientCgi ------------------------------------------------------------------------------------------
+void ClientNetwork::ClientCgi::setSendPack(SendPack * send_pack) 
+{ 
+	m_send_pack = send_pack; 
+	if (send_pack != nullptr)
+	{
+		if (send_pack->m_send_cmd_type != getCgiInfo().m_send_cmd_type)
+		{
+			slog_e("ClientNetwork::ClientCgi::setSendPack send_pack->m_send_cmd_type(%) != getCgiInfo().m_send_cmd_type(%0)", send_pack->m_send_cmd_type, getCgiInfo().m_send_cmd_type);
+		}
+	}
+}
+
+void ClientNetwork::ClientCgi::setRecvPack(RecvPack * recv_pack) 
+{
+	m_recv_pack = recv_pack;
+	if (recv_pack != nullptr)
+	{
+		if (recv_pack->m_recv_cmd_type != getCgiInfo().m_recv_cmd_type)
+		{
+			slog_e("ClientNetwork::ClientCgi::setSendPack recv_pack->m_recv_cmd_type(%) != getCgiInfo().m_recv_cmd_type(%0)", recv_pack->m_recv_cmd_type, getCgiInfo().m_recv_cmd_type);
+		}
+	}
+	onSetRecvPackEnd();
+}
+
+
+
+
+
+
+
 // ClientNetwork ------------------------------------------------------------------------------------------
 // interface --
 ClientNetwork::ClientNetwork()
