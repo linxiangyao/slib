@@ -138,7 +138,6 @@ public:
 	~__ClientCtx()
 	{
 		stop();
-		delete_and_erase_collection_elements(&m_cgi_ctxs);
 	}
 
 	bool createSocket(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port)
@@ -169,6 +168,7 @@ public:
 	{
 		m_init_param->m_sapi->stopClientSocket(m_sid);
 		__resetConnectState();
+		delete_and_erase_collection_elements(&m_cgi_ctxs);
 	}
 
 	bool connect()
@@ -383,7 +383,7 @@ public:
 			else // fatal error
 			{
 				slog_e("ClientNetwork::__onMsgTcpSocketClientRecvData fail to unpack. try disconnect");
-				stop();
+				stop();// TODO: not stop, but disconnect, mark all sent cgi fail once.
 				break;
 			}
 		}
