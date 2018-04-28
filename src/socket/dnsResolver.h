@@ -11,7 +11,9 @@ resovle ip text to ip.
 NOTE:
 	dns typical is a singleton
 
-TODO: change to getaddrinfo_a
+TODO: 
+	1. change to getaddrinfo_a
+	2. addNotifyLooper support target?
 */
 
 class DnsResolver : public IMessageHandler

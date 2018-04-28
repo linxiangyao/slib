@@ -119,13 +119,16 @@ public:
 class ClientNetwork::__ClientCtx
 {
 public:
-	__ClientCtx()
+	__ClientCtx(InitParam* param, ClientNetwork* network)
 	{
+		m_init_param = param; 
+		m_network = network;
+		m_connect_interval_mss = m_init_param->m_connect_interval_mss;
+
 		m_sid = 0;
 		m_connect_state = __EConnectState_disconnected;
 		m_sending_cgi_index = -1;
 		m_svr_port = 0;
-
 
 		m_is_repeat_last_connect_interval_ms = true;
 		m_last_reconnect_time_ms = 0;
@@ -138,17 +141,11 @@ public:
 		delete_and_erase_collection_elements(&m_cgi_ctxs);
 	}
 
-	void init(InitParam* param, ClientNetwork* network)
-	{
-		m_init_param = param; m_network = network;
-		m_connect_interval_mss = m_init_param->m_connect_interval_mss;
-	}
-
-	bool start(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port)
+	bool createSocket(const std::string& svr_ip_or_name, const std::string& svr_ip, uint32_t svr_port)
 	{
 		if (m_sid != 0)
 		{
-			slog_e("ClientNetwork::__ClientCtx::start already start.");
+			slog_e("ClientNetwork::__ClientCtx::createSocket already create socket.");
 			return false;
 		}
 
@@ -165,7 +162,7 @@ public:
 		m_svr_ip = svr_ip;
 		m_svr_port = svr_port;
 
-		return connect();
+		return true;
 	}
 
 	void stop()
@@ -682,6 +679,7 @@ ClientNetwork::~ClientNetwork()
 {
 	slog_d("delete ClientNetwork=%0", (uint64_t)this);
 	stop();
+
 	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
 	m_init_param.m_work_looper->removeMessagesBySender(this);
@@ -702,8 +700,7 @@ bool ClientNetwork::init(const InitParam& param)
 	m_init_param = param;
 
 	m_timer_id = m_init_param.m_work_looper->createTimer(NULL);
-	m_client_ctx = new __ClientCtx();
-	m_client_ctx->init(&m_init_param, this);
+	m_client_ctx = new __ClientCtx(&m_init_param, this);
 	
 	// dns_resolver
 	{
@@ -714,7 +711,7 @@ bool ClientNetwork::init(const InitParam& param)
 				return false;
 			m_init_param.m_dns_resolver = m_dns_resolver;
 		}
-		m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
+		m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
 	}
 
 	// speed_tester
@@ -1014,7 +1011,8 @@ void ClientNetwork::__onMsgNetSpeedTestResultUpdate(Message * msg)
 	m_speed_tester->stop();
 
 	// init client and connect
-	m_client_ctx->start(m->m_svr_ip_or_name, m->m_svr_ip_str, m->m_svr_port);
+	m_client_ctx->createSocket(m->m_svr_ip_or_name, m->m_svr_ip_str, m->m_svr_port);
+	m_client_ctx->connect();
 }
 
 
