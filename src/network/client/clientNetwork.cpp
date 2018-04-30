@@ -166,9 +166,14 @@ public:
 
 	void stop()
 	{
+		if (m_sid == 0)
+			return;
+
 		m_init_param->m_sapi->stopClientSocket(m_sid);
 		__resetConnectState();
 		delete_and_erase_collection_elements(&m_cgi_ctxs);
+
+		m_init_param->m_work_looper->removeMessagesBySender(this);
 	}
 
 	bool connect()
@@ -226,6 +231,12 @@ public:
 			return false;
 		}
 
+		if (m_sid == 0)
+		{
+			slog_e("ClientNetwork::__ClientCtx::startCgi, fail, sid=0");
+			return false;
+		}
+
 		if (m_cgi_ctxs.size() >= m_init_param->m_max_pack_count)
 		{
 			slog_e("ClientNetwork::__ClientCtx::startCgi, too many packs in network");
@@ -254,6 +265,9 @@ public:
 	
 	void cancelCgi(ClientCgi* cgi)
 	{
+		if (m_sid == 0)
+			return;
+
 		int cgi_index = __getCgiIndexBySendPackId(cgi->getSendPack()->m_send_pack_id);
 		if (cgi_index < 0)
 			return;
@@ -268,11 +282,14 @@ public:
 	
 	bool sendPack()
 	{
+		if (m_sid == 0)
+			return false;
+
 		checkTimeOutPacks();
 
 		// need connect
 		if (m_connect_state != __EConnectState_connected)
-			return true;
+			return false;
 
 		// already sending
 		if (m_sending_cgi_index >= 0)
@@ -299,6 +316,9 @@ public:
 	
 	void checkTimeOutPacks()
 	{
+		if (m_sid == 0)
+			return;
+
 		uint64_t cur_time_ms = TimeUtil::getMsTime();
 		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
 		{
@@ -312,13 +332,16 @@ public:
 		}
 	}
 	
-	socket_id_t getSid()
+	socket_id_t getSid() const
 	{
 		return m_sid;
 	}
 
 	void onSendDataEnd()
 	{
+		if (m_sid == 0)
+			return;
+
 		int sending_pack_index = m_sending_cgi_index;
 		m_sending_cgi_index = -1;
 
@@ -345,6 +368,9 @@ public:
 	
 	void onRecvData(const Binary& recv_data)
 	{
+		if (m_sid == 0)
+			return;
+
 		slog_d("recv data len=%0", recv_data.getLen());
 		m_recv_data.append(recv_data);
 
@@ -391,6 +417,9 @@ public:
 	
 	void onConnected()
 	{
+		if (m_sid == 0)
+			return;
+
 		slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 		if (m_connect_state == __EConnectState_connected)
 			return;
@@ -405,21 +434,28 @@ public:
 	
 	void onDisconnected()
 	{
+		if (m_sid == 0)
+			return;
+
 		slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 		if (m_connect_state == __EConnectState_disconnected)
 			return;
 
 		__resetConnectState();
 
+
 		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
 		{
 			__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
-			cgi_ctx->m_is_sent = false;
-
-			if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount())
+			if (cgi_ctx->m_is_sent)  // need to resend
 			{
-				__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackSysErr);
-				--i;
+				cgi_ctx->m_is_sent = false;
+
+				if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount())
+				{
+					__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackSysErr);
+					--i;
+				}
 			}
 		}
 
@@ -680,7 +716,6 @@ ClientNetwork::~ClientNetwork()
 	slog_d("delete ClientNetwork=%0", (uint64_t)this);
 	stop();
 
-	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper);
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
 	m_init_param.m_work_looper->removeMessagesBySender(this);
 	delete m_client_ctx;
@@ -711,7 +746,6 @@ bool ClientNetwork::init(const InitParam& param)
 				return false;
 			m_init_param.m_dns_resolver = m_dns_resolver;
 		}
-		m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
 	}
 
 	// speed_tester
@@ -756,6 +790,7 @@ bool ClientNetwork::start()
 
 	m_init_param.m_work_looper->addMsgHandler(this);
 	m_init_param.m_work_looper->addMsgTimerHandler(this);
+	m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);  //TODO
 
 	if (!__doTestSvrSpeed())
 	{
@@ -782,6 +817,7 @@ void ClientNetwork::stop()
 
 	m_init_param.m_work_looper->removeMsgHandler(this);
 	m_init_param.m_work_looper->removeMsgTimerHandler(this);
+	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper); //TODO
 
 	m_client_ctx->stop();
 	m_speed_tester->stop();
