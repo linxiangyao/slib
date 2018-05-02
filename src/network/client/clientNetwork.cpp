@@ -123,15 +123,13 @@ public:
 	{
 		m_init_param = param; 
 		m_network = network;
-		m_connect_interval_mss = m_init_param->m_connect_interval_mss;
 
 		m_sid = 0;
 		m_connect_state = __EConnectState_disconnected;
 		m_sending_cgi_index = -1;
 		m_svr_port = 0;
 
-		m_is_repeat_last_connect_interval_ms = true;
-		m_last_reconnect_time_ms = 0;
+		m_last_connect_time_ms = 0;
 		m_connect_count = 0;
 	}
 
@@ -170,9 +168,10 @@ public:
 			return;
 
 		m_init_param->m_sapi->stopClientSocket(m_sid);
-		__resetConnectState();
-		delete_and_erase_collection_elements(&m_cgi_ctxs);
+		onDisconnected();
 
+		m_connect_count = 0;
+		delete_and_erase_collection_elements(&m_cgi_ctxs);
 		m_init_param->m_work_looper->removeMessagesBySender(this);
 	}
 
@@ -191,7 +190,7 @@ public:
 			return true;
 
 		slog_v("doConnectSvr, connect_cout=%0", m_connect_count);
-		m_last_reconnect_time_ms = TimeUtil::getMsTime();
+		m_last_connect_time_ms = TimeUtil::getMsTime();
 		++m_connect_count;
 
 		// connect fasterst svr
@@ -443,7 +442,9 @@ public:
 
 		slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 
-		__resetConnectState();
+		m_connect_state = __EConnectState_disconnected;
+		m_recv_data.clear();
+		m_sending_cgi_index = -1;
 
 		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
 		{
@@ -499,14 +500,7 @@ private:
 			slog_w("ClientNetwork::__ClientCtx::onRecvPack recv c2sPush_pack! ignore.");
 		}
 	}
-	
-	void __resetConnectState()
-	{
-		m_connect_state = __EConnectState_disconnected;
-		m_recv_data.clear();
-		m_sending_cgi_index = -1;
-	}
-	
+		
 	void __addCgi(ClientCgi* cgi)
 	{
 		cgi->setStartMs(TimeUtil::getMsTime());
@@ -545,23 +539,23 @@ private:
 	{
 		uint64_t connect_interval_ms = __getConnectIntervalMs(m_connect_count);
 		uint64_t cur_time_ms = TimeUtil::getMsTime();
-		bool is_time_to_connect = cur_time_ms > m_last_reconnect_time_ms + connect_interval_ms;
+		bool is_time_to_connect = cur_time_ms > m_last_connect_time_ms + connect_interval_ms;
 		return is_time_to_connect;
 	}
 	
 	uint64_t __getConnectIntervalMs(size_t connect_count)
 	{
-		if (m_connect_interval_mss.size() == 0)
+		if (m_init_param->m_connect_interval_mss.size() == 0)
 			return -1;
 
-		if (connect_count <= m_connect_interval_mss.size() - 1)
+		if (connect_count <= m_init_param->m_connect_interval_mss.size() - 1)
 		{
-			return m_connect_interval_mss[connect_count];
+			return m_init_param->m_connect_interval_mss[connect_count];
 		}
 		else
 		{
-			if (m_is_repeat_last_connect_interval_ms)
-				return *m_connect_interval_mss.rbegin();
+			if (m_init_param->m_is_repeat_last_connect_interval_ms)
+				return *m_init_param->m_connect_interval_mss.rbegin();
 			else
 				return -1;
 		}
@@ -668,9 +662,7 @@ private:
 	uint32_t m_svr_port;
 	socket_id_t m_sid;
 	__EConnectState m_connect_state;
-	std::vector<int32_t> m_connect_interval_mss;
-	bool m_is_repeat_last_connect_interval_ms;
-	uint64_t m_last_reconnect_time_ms;
+	uint64_t m_last_connect_time_ms;
 	size_t m_connect_count;
 
 	Binary m_recv_data;
