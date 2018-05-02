@@ -230,12 +230,6 @@ public:
 			return false;
 		}
 
-		if (m_sid == 0)
-		{
-			slog_e("ClientNetwork::__ClientCtx::startCgi, fail, sid=0");
-			return false;
-		}
-
 		if (m_cgi_ctxs.size() >= m_init_param->m_max_pack_count)
 		{
 			slog_e("ClientNetwork::__ClientCtx::startCgi, too many packs in network");
