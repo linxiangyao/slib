@@ -182,7 +182,6 @@ public:
 	{
 		m_send_pack_id_seed = 0;
 		m_send_pack_seq_seed = 0;
-		m_timer_id = 0;
 		m_packer = new StPacker();
 
 		std::map<uint32_t, ClientCgiInfo> cgi_infos;
@@ -202,28 +201,21 @@ private:
 	virtual void onAppStartMsg(IConsoleAppApi * api) override
 	{
 		SimpleClientNetworkConsoleLogic::onAppStartMsg(api);
-		//m_timer_id = getLooper()->createTimer(NULL);
-		//getLooper()->startTimer(m_timer_id, 1, 20 * 1000);
 
 		m_send_pack_builder.m_packer = m_packer;
 		m_send_pack_builder.m_network = getNetwork();
 
 		__startNotifyStatistic();
 		__startCheckVersion();
-		//__startLogin();
 	}
 
 	virtual void onAppStopMsg() override
 	{
 		SimpleClientNetworkConsoleLogic::onAppStopMsg();
-		//getLooper()->releasseTimer(m_timer_id);
 	}
 
 	virtual void onMessageTimerTick(uint64_t timer_id, void* user_data) override
 	{
-		if (timer_id != m_timer_id)
-			return;
-		printf("on timer\n");
 	}
 
 	virtual void onClientNetwork_cgiDone(ClientNetwork* network, ClientCgi* cgi) override
@@ -261,8 +253,6 @@ private:
 		printf("client: check_version_cgi ok, resp field: new_client_ver=%s, download_url=%s, download_total_size=%s\n"
 			, c->m_s2c_resp_new_client_ver.c_str(), c->m_s2c_resp_download_url.c_str(), StringUtil::byteCountToDisplayString(c->m_s2c_resp_download_total_size).c_str());
 	}
-
-
 
 
 	  
@@ -306,7 +296,10 @@ private:
 		}
 	}
 
-	uint64_t m_timer_id;
+
+
+
+
 	__ClientSendPackBuilder m_send_pack_builder;
 	StPacker* m_packer;
 	uint64_t m_send_pack_id_seed;
