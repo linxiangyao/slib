@@ -26,7 +26,7 @@ NOTE:
 
 	2. thread model:
 	network is thread unsafe(for good perfromance).
-	network should run in one thread. that means network should be called in m_work_looper thread(typical is main thread), and network will callback in the same thread.
+	network should run in one thread, that means: network should be called in m_work_looper thread(typical is main thread), and network will callback in the same thread.
 	there may be many networks in one thread.
 
 	3. the cgi order is uncertain. 
