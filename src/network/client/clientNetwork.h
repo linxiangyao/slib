@@ -9,25 +9,122 @@ SCLIENT_NAMESPACE_BEGIN
 /*
 client network.
 
+dns.
+network speed test, choice fastest svr.
 auto connect.
 auto retry send pack.
 provide timeout funtion.
 provide priority funtion.
 flow limity.
-dns
-network speed test, choice fastest svr.
 
 
 
 NOTE:
-	one client network bind to one server. if there are two servers, there are two client networks.
+	1. client network & server
+	one sever may have many ips and ports.
+	one client network bind to one server. if there are two servers, there are two client networks. 
 
+	2. thread model:
 	network is thread unsafe(for good perfromance).
 	network should be called in m_work_looper thread(typical is main thread), and network will callback in the same thread.
 	there may be many networks in one thread.
 
-	one ITcpSocketCallbackApi may be used by many networks.
-	ITcpSocketCallbackApi may be in the same thread of network, or may not be.
+	3. the cgi order is uncertain. 
+	although the network send cgis one by one(e.g. send a_req, then send b_req), but the order of cgi resp is ununcertain(e.g. recv b_resp, then recv a_resp), and sometimes can't recv resp.
+
+	4. client network & TcpSocketCallbackApi
+	one TcpSocketCallbackApi may be used by many networks.
+	TcpSocketCallbackApi may be in the same thread of network, or may not be.
+
+
+
+example:
+	you should pack the send data and unpack the recv data.
+	you should inherit ClientCgi, and define cgi info.
+
+
+	ClientNetwork* g_netwrok = nullptr;
+	StPacker* g_packer = nullptr; // pack/unpack
+	int g_send_seq = 0;
+	uint64_t g_send_pack_id = 0;
+
+
+	ClientNetwork::SendPack* newSendPackAndPack(uint32_ send_cmd_type, const byte_t* send_body, size_t send_body_len)
+	{
+		ClientNetwork::SendPack* send_pack = g_network->newSendPack(++g_send_pack_id, send_cmd_type, ++g_send_seq);
+
+		StPacker::Pack p;
+		p.m_head.m_cmd_type = send_pack->m_send_cmd_type;
+		p.m_head.m_err = 0;
+		p.m_head.m_seq = send_pack->m_send_seq;
+		p.m_head.m_uin = 0;
+		memcpy(p.m_head.m_session_id_bin, m_session_id_bin, 16);
+		p.m_body.attach((byte_t*)send_body, send_body_len);
+		Binary* whole_pack_bin = &(send_pack->m_send_whole_pack_bin);
+		g_packer->packToBin(p, &(send_pack->m_send_whole_pack_bin));
+		p.m_body.detach();
+
+		return send_pack;
+	}
+
+
+	class __ClientCgi_SayHello : public ClientCgi
+	{
+	public:
+		static const ClientCgiInfo & s_getCgiInfo()
+		{
+			s_cgi_info.m_cgi_type = EClientCgiType_c2sReq_s2cResp;
+			s_cgi_info.m_send_cmd_type = 10001;
+			s_cgi_info.m_recv_cmd_type = 20001;
+			return s_cgi_info;
+		}
+
+		virtual const ClientCgiInfo & getCgiInfo() const { return s_getCgiInfo(); }
+
+		bool initSendPack()
+		{
+			m_c2s_req_body = "hello";
+			ClientNetwork::SendPack* send_pack = newSendPackAndPack(getCgiInfo().m_send_cmd_type, (const byte_t*)m_c2s_req_body.c_str(), m_c2s_req_body.size());
+			setSendPack(send_pack);
+		}
+
+		std::string m_c2s_req_body;
+		std::string m_s2c_resp_body;
+
+
+	private:
+		virtual void onSetRecvPackEnd()
+		{
+			ClientNetwork::RecvPack* recv_pack = getRecvPack();
+			StPacker::Pack* st_pack = (StPacker::Pack*)recv_pack->m_recv_ext;
+			m_s2c_resp_body = (const char*)st_pack->m_body.getData();
+		}
+
+		static ClientCgiInfo s_cgi_info;
+	};
+
+
+
+	class MyApp : public  ClientNetwork::ICallback
+	{
+	public:
+		MyApp()
+		{
+			...
+			__ClientCgi_SayHello* cgi = new __ClientCgi_SayHello();
+			cgi->initSendPack();
+			g_network->startCgi(cgi);
+		}
+
+		void onClientNetwork_cgiDone(ClientNetwork* network, ClientCgi* cgi)
+		{
+			if(cgi->getCgiInfo().m_send_cmd_type == 10001)
+			{
+				__ClientCgi_SayHello* c = (__ClientCgi_SayHello*)cgi;
+				printf("recv %s\n", c->m_s2c_resp_body.c_str());
+			}
+		}
+	}
 */
 class ClientNetwork : public IMessageHandler, public IMessageTimerHandler
 {
