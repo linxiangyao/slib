@@ -144,8 +144,8 @@ public:
 	{
 		if (m_sid != 0)
 		{
-			slog_e("ClientNetwork::__ClientCtx::createSocket already create socket.");
-			return false;
+			slog_d("ClientNetwork::__ClientCtx::createSocket already create socket.");
+			return true;
 		}
 
 		m_connect_count = 0;
@@ -341,6 +341,8 @@ public:
 	{
 		if (m_sid == 0)
 			return;
+		if (m_connect_state != __EConnectState_connected)
+			return;
 
 		int sending_pack_index = m_sending_cgi_index;
 		m_sending_cgi_index = -1;
@@ -349,11 +351,11 @@ public:
 		{
 			__CgiCtx* cgi_ctx = m_cgi_ctxs[sending_pack_index];
 			ClientCgi* cgi = cgi_ctx->m_cgi;
-			if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sReq_s2cResp) // need to wait s2cResp pack
+			if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sReq_s2cResp) // cgi need to wait s2cResp pack
 			{
 				cgi_ctx->m_is_sent = true;
 			}
-			else if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sNotify || cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cReq_cs2Resp)
+			else if (cgi->getCgiInfo().m_cgi_type == EClientCgiType_c2sNotify || cgi->getCgiInfo().m_cgi_type == EClientCgiType_s2cReq_cs2Resp) // cgi done
 			{
 				__markCgiDoneByIndex(sending_pack_index, EErrType_ok, 0);
 			}
@@ -370,15 +372,14 @@ public:
 	{
 		if (m_sid == 0)
 			return;
+		if (m_connect_state != __EConnectState_connected)
+			return;
 
 		slog_d("recv data len=%0", recv_data.getLen());
 		m_recv_data.append(recv_data);
 
 		while (true)
 		{
-			//if (!m_is_running)
-			//	break;
-
 			UnpackResult r;
 			m_init_param->m_unpacker->unpackClientRecvPack(m_recv_data.getData(), m_recv_data.getLen(), &r);
 			if (r.m_result_type == EUnpackResultType_ok)
@@ -409,7 +410,8 @@ public:
 			else // fatal error
 			{
 				slog_e("ClientNetwork::__onMsgTcpSocketClientRecvData fail to unpack. try disconnect");
-				stop();// TODO: not stop, but disconnect, mark all sent cgi fail once.
+				m_init_param->m_sapi->stopClientSocket(m_sid);
+				onDisconnected();
 				break;
 			}
 		}
@@ -419,10 +421,10 @@ public:
 	{
 		if (m_sid == 0)
 			return;
-
-		slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 		if (m_connect_state == __EConnectState_connected)
 			return;
+
+		slog_d("connected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 
 		m_connect_state = __EConnectState_connected;
 		m_connect_count = 0;
@@ -436,22 +438,21 @@ public:
 	{
 		if (m_sid == 0)
 			return;
-
-		slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 		if (m_connect_state == __EConnectState_disconnected)
 			return;
 
-		__resetConnectState();
+		slog_d("disconnected, svr_name=%0, svr_ip=%1, svr_port=%2", m_svr_ip_or_name, m_svr_ip.c_str(), m_svr_port);
 
+		__resetConnectState();
 
 		for (size_t i = 0; i < m_cgi_ctxs.size(); ++i)
 		{
 			__CgiCtx* cgi_ctx = m_cgi_ctxs[i];
-			if (cgi_ctx->m_is_sent)  // need to resend
+			if (cgi_ctx->m_is_sent)  // cgi is waiting resp, so mark cgi fail once
 			{
 				cgi_ctx->m_is_sent = false;
 
-				if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount())
+				if (cgi_ctx->m_try_count >= cgi_ctx->m_cgi->getMaxTryCount()) // cgi fail
 				{
 					__markCgiDoneByIndex((int)i, EErrType_local, ELocalErrCode_sendPackSysErr);
 					--i;
