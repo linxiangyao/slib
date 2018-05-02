@@ -93,7 +93,7 @@ private:
 			return;
 		}
 		
-		m_dns_resolver->addNotifyLooper(&m_api->getMessageLooper());
+		m_dns_resolver->addNotifyLooper(&m_api->getMessageLooper(), this);
 
 		if (!m_dns_resolver->startResolve("163.com"))
 		{

@@ -47,13 +47,17 @@ bool ClientNetSpeedTester::start()
 	slog_d("speed_test start");
 
 	m_init_param.m_work_looper->addMsgHandler(this);
-	m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);
+	m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper, this);
+
+	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
+	{
+		m_client_ctxs[i]->start();
+	}
 
 	Message* msg = new Message();
 	msg->m_msg_type = EMsgType_onTestStart;
 	__postMsgToTarget(msg);
 
-	__start();
 	return true;
 }
 
@@ -144,20 +148,14 @@ void ClientNetSpeedTester::__checkIsDone()
 	}
 }
 
-void ClientNetSpeedTester::__start()
-{
-	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
-	{
-		m_client_ctxs[i]->start();
-	}
-}
-
 void ClientNetSpeedTester::__stop()
 {
 	if (!m_is_running)
 		return;
 	m_is_running = false;
+
 	m_init_param.m_work_looper->removeMsgHandler(this);
+	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper, this);
 
 	for (size_t i = 0; i < m_client_ctxs.size(); ++i)
 	{
@@ -301,7 +299,7 @@ void ClientNetSpeedTester::__ClientCtx::__doDns()
 		return;
 
 	DnsResolver::DnsRecord dns_record;
-	if (m_init_param->m_dns_resolver->getIpByName(m_svr_info.m_svr_ip_or_name, &dns_record))
+	if (m_init_param->m_dns_resolver->getDnsRecordByName(m_svr_info.m_svr_ip_or_name, &dns_record))
 	{
 		__addDnsRecord(dns_record);
 		return;

@@ -52,9 +52,9 @@ public:
 
 	bool init(MessageLooper* env_loop = nullptr);
 	void stop();
-	bool addNotifyLooper(MessageLooper* notify_loop);
-	void removeNotifyLooper(MessageLooper* notify_loop);
-	bool getIpByName(const std::string& name, DnsRecord* record);
+	bool addNotifyLooper(MessageLooper* notify_loop, void* notify_target);
+	void removeNotifyLooper(MessageLooper* notify_loop, void* notify_target);
+	bool getDnsRecordByName(const std::string& name, DnsRecord* record);
 	bool startResolve(const std::string& name);
 
 
@@ -69,6 +69,7 @@ private:
 	virtual void onMessage(Message * msg, bool * is_handled) override;
 
 
+	void __stop();
 	void __doResolve();
 	void __notifyResolveEnd(bool is_ok, const DnsRecord& record);
 
@@ -78,7 +79,7 @@ private:
 	std::vector<Thread*> m_resolve_threads;
 	std::map<std::string, DnsRecord> m_records;
 	std::vector<std::string> m_to_resolve_names;
-	std::vector<MessageLooper*> m_notify_loops;
+	MsgLoopNotifySet* m_notify_set;
 };
 
 

@@ -717,7 +717,6 @@ ClientNetwork::~ClientNetwork()
 	stop();
 
 	m_init_param.m_work_looper->releasseTimer(m_timer_id);
-	m_init_param.m_work_looper->removeMessagesBySender(this);
 	delete m_client_ctx;
 	delete m_speed_tester;
 	delete m_dns_resolver;
@@ -790,7 +789,7 @@ bool ClientNetwork::start()
 
 	m_init_param.m_work_looper->addMsgHandler(this);
 	m_init_param.m_work_looper->addMsgTimerHandler(this);
-	m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper);  //TODO
+	m_init_param.m_dns_resolver->addNotifyLooper(m_init_param.m_work_looper, this);
 
 	if (!__doTestSvrSpeed())
 	{
@@ -817,12 +816,11 @@ void ClientNetwork::stop()
 
 	m_init_param.m_work_looper->removeMsgHandler(this);
 	m_init_param.m_work_looper->removeMsgTimerHandler(this);
-	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper); //TODO
+	m_init_param.m_dns_resolver->removeNotifyLooper(m_init_param.m_work_looper, this);
 
 	m_client_ctx->stop();
 	m_speed_tester->stop();
 
-	m_init_param.m_work_looper->removeMessagesBySender(this);
 	m_init_param.m_work_looper->stopTimer(m_timer_id);
 
 	__notifyStopped();

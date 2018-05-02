@@ -93,7 +93,6 @@ private:
 
 
 
-
 DnsResolver::DnsResolver()
 {
 	slog_d("new DnsResolver=%0", (uint64_t)this);
@@ -105,10 +104,10 @@ DnsResolver::~DnsResolver()
 {
 	slog_d("delete DnsResolver=%0", (uint64_t)this);
 	ScopeMutex _l(m_mutex);
+	__stop();
 	m_env_loop->removeMsgHandler(this);
-
-	delete_and_erase_collection_elements(&m_resolve_threads);
 	delete m_env_thread;
+	delete m_notify_set;
 }
 
 bool DnsResolver::init(MessageLooper * work_loop) 
@@ -131,6 +130,8 @@ bool DnsResolver::init(MessageLooper * work_loop)
 		m_env_loop = work_loop;
 	}
 	m_env_loop->addMsgHandler(this);
+
+	m_notify_set = new MsgLoopNotifySet();
 	return true;
 }
 
@@ -138,26 +139,22 @@ void DnsResolver::stop()
 {
 	slog_d("DnsResolver stop");
 	ScopeMutex _l(m_mutex);
-	delete_and_erase_collection_elements(&m_resolve_threads);
-	m_env_loop->removeMessagesBySender(this);
+	__stop();
 }
 
-bool DnsResolver::addNotifyLooper(MessageLooper * notify_loop)
+bool DnsResolver::addNotifyLooper(MessageLooper * notify_loop, void* notify_target)
 {
 	ScopeMutex _l(m_mutex);
-	if (is_vector_contain_element(m_notify_loops, notify_loop))
-		return true;
-	m_notify_loops.push_back(notify_loop);
-	return false;
+	return m_notify_set->addCtx(notify_loop, notify_target);	
 }
 
-void DnsResolver::removeNotifyLooper(MessageLooper * notify_loop)
+void DnsResolver::removeNotifyLooper(MessageLooper * notify_loop, void* notify_target)
 {
 	ScopeMutex _l(m_mutex);
-	erase_vector_element_by_value(&m_notify_loops, notify_loop);
+	m_notify_set->removeCtxByLoopAndTarget(notify_loop, notify_target);
 }
 
-bool DnsResolver::getIpByName(const std::string& name, DnsRecord* record)
+bool DnsResolver::getDnsRecordByName(const std::string& name, DnsRecord* record)
 {
 	ScopeMutex _l(m_mutex);
 	auto it = m_records.find(name);
@@ -221,6 +218,12 @@ void DnsResolver::onMessage(Message * msg, bool * is_handled)
 	}
 }
 
+void DnsResolver::__stop()
+{
+	delete_and_erase_collection_elements(&m_resolve_threads);
+	//m_env_loop->removeMessagesBySender(this);
+}
+
 void DnsResolver::__doResolve()
 {
 	if (m_to_resolve_names.size() == 0)
@@ -238,10 +241,10 @@ void DnsResolver::__doResolve()
 
 void DnsResolver::__notifyResolveEnd(bool is_ok, const DnsRecord & record)
 {
-	for (size_t i = 0; i < m_notify_loops.size(); ++i)
+	for (size_t i = 0; i < m_notify_set->getCtxCount(); ++i)
 	{
 		Msg_ResolveEnd* msg = new Msg_ResolveEnd(this, is_ok, record);
-		m_notify_loops[i]->postMessage(msg);
+		m_notify_set->postMsg(msg, (int)i);
 	}
 }
 

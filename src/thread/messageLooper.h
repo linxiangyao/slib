@@ -101,5 +101,78 @@ private:
 
 
 
+
+
+
+
+
+
+
+
+
+class MsgLoopNotifySet
+{
+public:
+	class NotifyCtx
+	{
+	public:
+		MessageLooper * m_loop;
+		void* m_target;
+	};
+
+	bool addCtx(MessageLooper * loop, void* target)
+	{
+		if (getIsContainCtxByLoopAndTarget(loop, target))
+			return false;
+		return true;
+	}
+
+	void removeCtxByLoopAndTarget(MessageLooper * loop, void* target)
+	{
+		int index = getCtxIndexByLoopAndTarget(loop, target);
+		if (index < 0)
+			return;
+
+		delete_and_erase_vector_element_by_index(&m_ctxs, index);
+	}
+
+	int getCtxIndexByLoopAndTarget(MessageLooper * loop, void* target) const
+	{
+		for (size_t i = 0; i < m_ctxs.size(); ++i)
+		{
+			if (m_ctxs[i]->m_loop == loop && m_ctxs[i]->m_target == target)
+				return (int)i;
+		}
+
+		return -1;
+	}
+
+	bool getIsContainCtxByLoopAndTarget(MessageLooper * loop, void* target) const
+	{
+		return getCtxIndexByLoopAndTarget(loop, target) >= 0;
+	}
+
+	size_t getCtxCount() const
+	{
+		return m_ctxs.size();
+	}
+
+	void postMsg(Message* msg, int ctx_index)
+	{
+		if (ctx_index < 0 || ctx_index >= m_ctxs.size())
+			return;
+
+		msg->m_target = m_ctxs[ctx_index]->m_target;
+		m_ctxs[ctx_index]->m_loop->postMessage(msg);
+	}
+
+private:
+	std::vector<NotifyCtx*> m_ctxs;
+};
+
+
+
+
+
 S_NAMESPACE_END
 #endif

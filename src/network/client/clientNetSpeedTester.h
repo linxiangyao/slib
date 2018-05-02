@@ -127,7 +127,6 @@ private:
 	void __onMessage_dnsResolved(Message* msg);
 
 	void __checkIsDone();
-	void __start();
 	void __stop();
 	void __postMsgToTarget(Message* msg);
 	int __getClientCtxIndexBySvrName(const std::string& svr_ip_or_name);
