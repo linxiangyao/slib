@@ -30,7 +30,7 @@ NOTE:
 	there may be many networks in one thread.
 
 	3. the cgi order is uncertain. 
-	although the network send cgis one by one(e.g. send a_req, then send b_req), but the order of cgi resp is ununcertain(e.g. recv b_resp, then recv a_resp), and sometimes can't recv resp.
+	although the network send cgis one by one(e.g. send a_req, then send b_req), but the order of cgi resp is uncertain(e.g. recv b_resp, then recv a_resp), and sometimes can't recv resp.
 
 	4. client network & TcpSocketCallbackApi
 	one TcpSocketCallbackApi may be used by many networks.
@@ -60,7 +60,6 @@ example:
 		p.m_head.m_uin = 0;
 		memcpy(p.m_head.m_session_id_bin, m_session_id_bin, 16);
 		p.m_body.attach((byte_t*)send_body, send_body_len);
-		Binary* whole_pack_bin = &(send_pack->m_send_whole_pack_bin);
 		g_packer->packToBin(p, &(send_pack->m_send_whole_pack_bin));
 		p.m_body.detach();
 
